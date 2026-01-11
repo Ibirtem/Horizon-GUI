@@ -58,30 +58,20 @@ namespace BlackHorizon.HorizonGUI.Editor
             HorizonGUIFactory.SetLayoutSize(linksContainer, flexH: 0);
 
             TMP_InputField githubInput = CreateLinkRow(linksContainer, "GitHub", "icon_github.png");
-
             TMP_InputField boostyInput = CreateLinkRow(linksContainer, "Boosty", "icon_boosty.png");
-
-            GameObject btnRow = HorizonGUIFactory.CreateRow("TestActions", page, spacing: 10, align: TextAnchor.MiddleCenter);
-            HorizonGUIFactory.SetLayoutSize(btnRow, minH: 50);
-
-            GameObject testBtn = HorizonGUIFactory.CreatePanel("Btn_ShowModal", btnRow, new Color(1,1,1,0.1f), HorizonGUIFactory.GetOrGenerateRoundedSprite());
-            HorizonGUIFactory.SetLayoutSize(testBtn, minW: 200, minH: 40);
-            testBtn.AddComponent<Button>().targetGraphic = testBtn.GetComponent<Image>();
-            testBtn.GetComponent<Image>().raycastTarget = true;
-            
-            HorizonGUIFactory.CreateText(testBtn, "Test Overlay", HorizonGUIFactory.TextStyle.Body, TextAlignmentOptions.Center);
 
             // ================================================================
             // LOGIC
             // ================================================================
             return HorizonGUIFactory.ConfigureLogic<HorizonGUI_AboutModule>(page, logic =>
             {
+                // GitHub
                 logic.Bind("githubField", githubInput);
                 logic.BindVal("githubUrl", "https://github.com/Ibirtem/Horizon-GUI");
+
+                // Boosty
                 logic.Bind("linkField", boostyInput);
                 logic.BindVal("boostyUrl", "https://boosty.to/ibirtem");
-                
-                HorizonGUIFactory.BindEventWithArgs(testBtn, logic.TargetScript, "OpenTestModal");
             });
         }
 

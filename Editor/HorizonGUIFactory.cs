@@ -612,6 +612,108 @@ namespace BlackHorizon.HorizonGUI.Editor
             }
         }
 
+        // --- COMPLEX WIDGETS ---
+
+        /// <summary>
+        /// Creates a complete Data Grid with a pool of reusable slots.
+        /// </summary>
+        /// <param name="name">Name of the Grid Object.</param>
+        /// <param name="parent">Parent container.</param>
+        /// <param name="poolSize">How many slots to create (fixed pool).</param>
+        /// <param name="cellSize">Size of each cell (x, y).</param>
+        /// <param name="eventTarget">The UdonBehaviour that will receive clicks.</param>
+        /// <param name="eventName">The custom event name to call.</param>
+        /// <returns>The HorizonDataGrid manager script.</returns>
+        public static HorizonDataGrid CreateDataGrid(
+            string name,
+            GameObject parent,
+            int poolSize,
+            Vector2 cellSize,
+            UdonSharpBehaviour eventTarget = null,
+            string eventName = "OnItemSelected"
+        )
+        {
+            // 1. Create Container (Grid Layout)
+            GameObject gridObj = CreateGrid(name, parent, cellSize, new Vector2(10, 10), flexGrow: 1, padding: 10);
+
+            // 2. Attach Manager
+            var manager = AttachLogic<HorizonDataGrid>(gridObj);
+
+            // 3. Generate Pool
+            var generatedSlots = new System.Collections.Generic.List<HorizonGridItem>();
+            Sprite slotBg = GetOrGenerateRoundedSprite();
+            Sprite defIcon = LoadPackageSprite("information_source.png");
+
+            for (int i = 0; i < poolSize; i++)
+            {
+                string slotName = $"Slot_{i:00}";
+
+                GameObject slotObj = CreateIconButton(slotName, gridObj, slotBg, defIcon);
+
+                var itemScript = AttachLogic<HorizonGridItem>(slotObj);
+
+                ConfigureLogic<HorizonGridItem>(slotObj, binder =>
+                {
+                    binder.Bind("gridManager", manager);
+                    binder.BindVal("slotIndex", i);
+                    binder.Bind("titleText", null);
+
+                    var img = slotObj.GetComponent<Image>();
+                    var iconTrans = slotObj.transform.Find("Icon");
+
+                    if (img != null) binder.Bind("backgroundImage", img);
+                    if (iconTrans != null) binder.Bind("iconImage", iconTrans.GetComponent<Image>());
+                });
+
+                // Add Text component specifically for Grid Item if not present
+                if (slotObj.GetComponentInChildren<TextMeshProUGUI>() == null)
+                {
+                    var t = CreateText(slotObj, "Item Name", TextStyle.Small, TextAlignmentOptions.Center);
+                    t.rectTransform.anchorMin = new Vector2(0, 0);
+                    t.rectTransform.anchorMax = new Vector2(1, 0);
+                    t.rectTransform.pivot = new Vector2(0.5f, 0);
+                    t.rectTransform.offsetMin = new Vector2(5, 5);
+                    t.rectTransform.offsetMax = new Vector2(-5, 25);
+
+                    ConfigureLogic<HorizonGridItem>(slotObj, binder => binder.Bind("titleText", t));
+                }
+
+                Button btn = slotObj.GetComponent<Button>();
+                var itemUdon = UdonSharpEditorUtility.GetBackingUdonBehaviour(itemScript);
+
+                if (btn != null && itemUdon != null)
+                {
+                    int eventCount = btn.onClick.GetPersistentEventCount();
+                    for (int k = eventCount - 1; k >= 0; k--)
+                        UnityEditor.Events.UnityEventTools.RemovePersistentListener(btn.onClick, k);
+
+                    UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
+                        btn.onClick,
+                        itemUdon.SendCustomEvent,
+                        "OnClick"
+                    );
+                }
+
+                generatedSlots.Add(itemScript);
+            }
+
+            // 4. Configure Manager
+            ConfigureLogic<HorizonDataGrid>(gridObj, binder =>
+            {
+                binder.BindArray("slotPool", generatedSlots);
+                binder.BindVal("itemsPerPage", poolSize);
+
+                if (eventTarget != null)
+                {
+                    var targetBacking = UdonSharpEditorUtility.GetBackingUdonBehaviour(eventTarget);
+                    binder.Bind("targetCallback", targetBacking);
+                    binder.BindVal("callbackEventName", eventName);
+                }
+            });
+
+            return manager;
+        }
+
         // --- FORM CONTROLS (Sliders & Toggles) ---
 
         /// <summary>

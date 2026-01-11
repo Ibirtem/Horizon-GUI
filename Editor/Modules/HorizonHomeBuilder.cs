@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEditor;
+using TMPro;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
@@ -20,24 +21,44 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject sep = HorizonGUIFactory.CreatePanel("Sep", page, new Color(1, 1, 1, 0.2f), null);
             HorizonGUIFactory.SetLayoutSize(sep, minH: 2, prefH: 2);
 
-            GameObject gridObj = HorizonGUIFactory.CreateGrid("PlayerGrid", page, new Vector2(64, 64), new Vector2(15, 15), flexGrow: 1);
+            // 2. GRID GENERATION
+            int poolSize = 64;
+            Vector2 cellSize = new Vector2(64, 64);
+            var gridManager = HorizonGUIFactory.CreateDataGrid("PlayerGrid", page, poolSize, cellSize);
 
-            var slots = new System.Collections.Generic.List<GameObject>();
             Sprite circle = HorizonGUIFactory.GetOrGenerateRoundedSprite();
 
-            for (int i = 0; i < 32; i++)
+            foreach (var item in gridManager.slotPool)
             {
-                GameObject slot = HorizonGUIFactory.CreatePanel($"Slot_{i}", gridObj, new Color(1, 1, 1, 0.1f), circle);
-                slot.AddComponent<Mask>().showMaskGraphic = true;
+                if (item == null) continue;
 
-                slot.AddComponent<Button>();
+                if (item.backgroundImage != null)
+                {
+                    item.backgroundImage.sprite = circle;
+                    item.backgroundImage.type = Image.Type.Sliced;
+                    item.backgroundImage.color = new Color(1, 1, 1, 0.1f);
+                    item.backgroundImage.raycastTarget = true;
 
-                slot.GetComponent<Image>().raycastTarget = true;
+                    Button btn = item.GetComponent<Button>();
+                    if (btn != null)
+                    {
+                        var cb = btn.colors;
+                        cb.normalColor = Color.white;
+                        cb.highlightedColor = new Color(1, 1, 1, 1.2f);
+                        cb.pressedColor = new Color(0.7f, 0.7f, 0.7f, 1f);
+                        btn.colors = cb;
+                    }
+                }
 
-                GameObject inner = HorizonGUIFactory.CreatePanel("Visual", slot, new Color(1, 1, 1, 0.8f), circle);
-                HorizonGUIFactory.Stretch(inner);
-                slot.SetActive(false);
-                slots.Add(slot);
+                if (item.iconImage != null)
+                {
+                    HorizonGUIFactory.Stretch(item.iconImage.gameObject, 0);
+                    item.iconImage.sprite = circle;
+                    item.iconImage.type = Image.Type.Sliced;
+                    item.iconImage.color = new Color(1, 1, 1, 0.8f);
+                }
+
+                if (item.titleText != null) item.titleText.gameObject.SetActive(false);
             }
 
             // ================================================================
@@ -47,12 +68,14 @@ namespace BlackHorizon.HorizonGUI.Editor
             return HorizonGUIFactory.ConfigureLogic<HorizonGUI_HomeModule>(page, logic =>
             {
                 logic.Bind("instanceInfoText", tInfo);
-                logic.BindArray("playerSlots", slots);
+                logic.Bind("playerGrid", gridManager);
 
-                for (int i = 0; i < slots.Count; i++)
+                HorizonGUIFactory.ConfigureLogic<HorizonDataGrid>(gridManager.gameObject, gridBinder =>
                 {
-                    HorizonGUIFactory.BindEventWithArgs(slots[i], logic.TargetScript, "OnPlayerSlotClicked", i);
-                }
+                    gridBinder.Bind("targetCallback", logic.TargetScript);
+                    gridBinder.BindVal("callbackEventName", "OnPlayerSlotClicked");
+                    gridBinder.BindVal("targetVariableInt", "_lastEventInt");
+                });
             });
         }
     }

@@ -1,35 +1,38 @@
 using UnityEngine;
 using TMPro;
+using VRC.SDKBase;
 
 #if UDONSHARP
 using UdonSharp;
-using VRC.SDKBase;
 using VRC.Udon;
 #endif
 
 namespace BlackHorizon.HorizonGUI
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-#if UDONSHARP
     public class HorizonGUI_HomeModule : HorizonGUIModule
-#else
-    public class HorizonGUI_HomeModule : HorizonGUIModule
-#endif
     {
         [Header("Home Info")]
         public TextMeshProUGUI instanceInfoText;
 
-        [Header("Player Grid")]
-        public GameObject[] playerSlots;
+        [Header("Data Grid")]
+        /// <summary>
+        /// Reference to the centralized grid manager for players.
+        /// </summary>
+        public HorizonDataGrid playerGrid;
 
+        /// <summary>
+        /// Storage for the last clicked item ID, sent by HorizonDataGrid.
+        /// </summary>
         [System.NonSerialized] public int _lastEventInt;
-        [System.NonSerialized] public string _lastEventString;
 
+        /// <summary>
+        /// Called via Custom Event by playerGrid when a slot is clicked.
+        /// </summary>
         public void OnPlayerSlotClicked()
         {
-            int slotIndex = _lastEventInt;
-            Debug.Log($"[HorizonHome] Clicked on player slot index: {slotIndex}");
-
+            int playerId = _lastEventInt;
+            Debug.Log($"[HorizonHome] Clicked on player ID: {playerId}");
         }
 
         private void OnEnable()
@@ -39,7 +42,7 @@ namespace BlackHorizon.HorizonGUI
 
         private void Update()
         {
-            if (Time.frameCount % 60 == 0)
+            if (Time.frameCount % 100 == 0)
             {
                 UpdateInfo();
             }
@@ -52,28 +55,30 @@ namespace BlackHorizon.HorizonGUI
 #if UDONSHARP
             playerCount = VRCPlayerApi.GetPlayerCount();
             
-            if (playerSlots != null && playerSlots.Length > 0)
+            if (playerGrid != null)
             {
-                VRCPlayerApi[] players = new VRCPlayerApi[playerSlots.Length];
+                VRCPlayerApi[] players = new VRCPlayerApi[playerCount];
                 VRCPlayerApi.GetPlayers(players);
 
-                for (int i = 0; i < playerSlots.Length; i++)
+                int[] ids = new int[playerCount];
+                string[] names = new string[playerCount];
+
+                for (int i = 0; i < playerCount; i++)
                 {
-                    if (playerSlots[i] != null)
+                    if (Utilities.IsValid(players[i]))
                     {
-                        bool isActive = (i < players.Length) && Utilities.IsValid(players[i]);
-                        playerSlots[i].SetActive(isActive);
+                        ids[i] = players[i].playerId;
+                        names[i] = players[i].displayName;
                     }
                 }
+
+                playerGrid.LoadData(ids, names, null);
             }
 #else
             playerCount = 1;
-            if (playerSlots != null && playerSlots.Length > 0)
+            if (playerGrid != null)
             {
-                for (int i = 0; i < playerSlots.Length; i++)
-                {
-                    if (playerSlots[i] != null) playerSlots[i].SetActive(i == 0);
-                }
+                playerGrid.LoadData(new int[] { 0 }, new string[] { "LocalDev" }, null);
             }
 #endif
 
