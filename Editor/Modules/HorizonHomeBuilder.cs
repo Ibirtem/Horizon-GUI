@@ -24,10 +24,16 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             var slots = new System.Collections.Generic.List<GameObject>();
             Sprite circle = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+
             for (int i = 0; i < 32; i++)
             {
                 GameObject slot = HorizonGUIFactory.CreatePanel($"Slot_{i}", gridObj, new Color(1, 1, 1, 0.1f), circle);
                 slot.AddComponent<Mask>().showMaskGraphic = true;
+
+                slot.AddComponent<Button>();
+
+                slot.GetComponent<Image>().raycastTarget = true;
+
                 GameObject inner = HorizonGUIFactory.CreatePanel("Visual", slot, new Color(1, 1, 1, 0.8f), circle);
                 HorizonGUIFactory.Stretch(inner);
                 slot.SetActive(false);
@@ -41,8 +47,12 @@ namespace BlackHorizon.HorizonGUI.Editor
             return HorizonGUIFactory.ConfigureLogic<HorizonGUI_HomeModule>(page, logic =>
             {
                 logic.Bind("instanceInfoText", tInfo);
-
                 logic.BindArray("playerSlots", slots);
+
+                for (int i = 0; i < slots.Count; i++)
+                {
+                    HorizonGUIFactory.BindEventWithArgs(slots[i], logic.TargetScript, "OnPlayerSlotClicked", i);
+                }
             });
         }
     }

@@ -602,6 +602,14 @@ namespace BlackHorizon.HorizonGUI.Editor
             {
                 _so.ApplyModifiedProperties();
             }
+
+            private UdonSharpBehaviour _script;
+            public UdonSharpBehaviour TargetScript => _script;
+            public HorizonLogicBinder(UdonSharpBehaviour target)
+            {
+                _script = target;
+                _so = new SerializedObject(target);
+            }
         }
 
         // --- FORM CONTROLS (Sliders & Toggles) ---
@@ -795,6 +803,53 @@ namespace BlackHorizon.HorizonGUI.Editor
             scroll.verticalScrollbarSpacing = -3;
 
             return content;
+        }
+
+        // --- SMART EVENT BINDING ---
+
+        /// <summary>
+        /// Binds a button click to a Udon event with parameters (int/string).
+        /// Adds a HorizonEventCaller proxy to the button object.
+        /// </summary>
+        /// <param name="buttonObj">GameObject with the Button component.</param>
+        /// <param name="target">The UdonBehaviour to receive the call.</param>
+        /// <param name="eventName">Name of the method to call (e.g., "OnSlotClicked").</param>
+        /// <param name="intVal">Integer parameter to pass.</param>
+        /// <param name="stringVal">String parameter to pass (optional).</param>
+        public static void BindEventWithArgs(GameObject buttonObj, UdonSharpBehaviour target, string eventName, int intVal = 0, string stringVal = "")
+        {
+            Button btn = buttonObj.GetComponent<Button>();
+            if (btn == null)
+            {
+                Debug.LogError($"[HorizonGUI] Cannot bind event: {buttonObj.name} has no Button component.");
+                return;
+            }
+
+            var caller = AttachLogic<HorizonEventCaller>(buttonObj);
+
+            ConfigureLogic<HorizonEventCaller>(buttonObj, binder =>
+            {
+                var targetUdon = UdonSharpEditorUtility.GetBackingUdonBehaviour(target);
+
+                binder.Bind("targetBehaviour", targetUdon);
+                binder.BindVal("eventName", eventName);
+                binder.BindVal("intPayload", intVal);
+                binder.BindVal("stringPayload", stringVal);
+            });
+
+            int eventCount = btn.onClick.GetPersistentEventCount();
+            for (int i = eventCount - 1; i >= 0; i--)
+                UnityEditor.Events.UnityEventTools.RemovePersistentListener(btn.onClick, i);
+
+            var callerUdon = UdonSharpEditorUtility.GetBackingUdonBehaviour(caller);
+            if (callerUdon != null)
+            {
+                UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
+                    btn.onClick,
+                    callerUdon.SendCustomEvent,
+                    "OnClick"
+                );
+            }
         }
     }
 }

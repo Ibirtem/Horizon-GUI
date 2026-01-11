@@ -22,6 +22,16 @@ namespace BlackHorizon.HorizonGUI
         [Header("Player Grid")]
         public GameObject[] playerSlots;
 
+        [System.NonSerialized] public int _lastEventInt;
+        [System.NonSerialized] public string _lastEventString;
+
+        public void OnPlayerSlotClicked()
+        {
+            int slotIndex = _lastEventInt;
+            Debug.Log($"[HorizonHome] Clicked on player slot index: {slotIndex}");
+
+        }
+
         private void OnEnable()
         {
             UpdateInfo();
@@ -29,7 +39,7 @@ namespace BlackHorizon.HorizonGUI
 
         private void Update()
         {
-            if (Time.frameCount % 60 == 0) 
+            if (Time.frameCount % 60 == 0)
             {
                 UpdateInfo();
             }
@@ -38,7 +48,7 @@ namespace BlackHorizon.HorizonGUI
         public void UpdateInfo()
         {
             int playerCount = 0;
-            
+
 #if UDONSHARP
             playerCount = VRCPlayerApi.GetPlayerCount();
             
