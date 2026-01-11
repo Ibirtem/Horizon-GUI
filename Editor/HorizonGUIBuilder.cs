@@ -208,7 +208,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             // Clock
             GameObject clockObj = CreateBlockSafe("Clock", header);
             HorizonGUIFactory.SetLayoutSize(clockObj, minW: 880, minH: 60);
-            var clockTxt = HorizonGUIFactory.CreateText(clockObj, "12:00", 54, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Right);
+            var clockTxt = HorizonGUIFactory.CreateText(clockObj, "12:00", HorizonGUIFactory.TextStyle.Clock, TextAlignmentOptions.Right);
 
             // Separator Container
             GameObject headerSepContainer = CreateBlockSafe("HeaderSepContainer", parent);
@@ -226,6 +226,104 @@ namespace BlackHorizon.HorizonGUI.Editor
         {
             go.layer = layer;
             foreach (Transform child in go.transform) SetLayerRecursive(child.gameObject, layer);
+        }
+
+        public static void RebuildOnTarget(HorizonGUIManager manager)
+        {
+            GameObject systemRoot = manager.gameObject;
+
+            // 1. CLEANING OLD
+            while (systemRoot.transform.childCount > 0)
+            {
+                GameObject.DestroyImmediate(systemRoot.transform.GetChild(0).gameObject);
+            }
+
+            // 2. INPUT
+            EnsureEventSystemInside(systemRoot);
+
+            // 3. CANVAS
+            GameObject canvasObj = InitializeCanvas("Visual_Canvas", systemRoot);
+            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+
+            // 4. LAYOUT & MODULES
+            BuildBackground(canvasObj, bgSprite);
+            GameObject layoutRoot = BuildLayoutRoot(canvasObj);
+            GameObject navContainer = BuildSidebar(layoutRoot, bgSprite);
+            GameObject contentArea = BuildContentArea(layoutRoot);
+            var clockTxt = BuildHeader(contentArea);
+
+            GameObject pagesContainer = HorizonGUIFactory.CreateBlock("Pages", contentArea);
+            HorizonGUIFactory.SetLayoutSize(pagesContainer, flexH: 1);
+            HorizonGUIFactory.Stretch(pagesContainer);
+            HorizonGUIFactory.CreateVerticalGroup(pagesContainer, 0, null, true, true);
+
+            // 5. MODULES CREATION
+            var builders = new List<IHorizonModuleBuilder>
+            {
+                new HorizonHomeBuilder(),
+                new HorizonWeatherBuilder(),
+                new HorizonAboutBuilder()
+            };
+
+            var createdModules = new List<HorizonGUIModule>();
+            var createdButtons = new List<HorizonGUINavigationButton>();
+
+            for (int i = 0; i < builders.Count; i++)
+            {
+                var builder = builders[i];
+                HorizonGUIModule moduleScript = builder.BuildPage(pagesContainer);
+                moduleScript.gameObject.SetActive(i == 0);
+                createdModules.Add(moduleScript);
+
+                if (builder is HorizonAboutBuilder)
+                {
+                    GameObject spacer = HorizonGUIFactory.CreateBlock("NavSpacer", navContainer);
+                    HorizonGUIFactory.SetLayoutSize(spacer, flexH: 1);
+                }
+
+                Sprite icon = HorizonGUIFactory.LoadPackageSprite(builder.IconName);
+                GameObject btnObj = HorizonGUIFactory.CreateIconButton($"Btn_{builder.ModuleName}", navContainer, bgSprite, icon);
+
+                HorizonGUIFactory.SetLayoutSize(btnObj, minW: 80, minH: 80, prefW: 80, prefH: 80, flexH: 0);
+
+                var btnScript = HorizonGUIFactory.AttachLogic<HorizonGUINavigationButton>(btnObj);
+
+                HorizonGUIFactory.ConfigureLogic<HorizonGUINavigationButton>(btnObj, b =>
+                {
+                    b.Bind("manager", manager);
+                    b.BindVal("tabIndex", i);
+                    b.Bind("background", btnObj.GetComponent<Image>());
+                    b.Bind("icon", btnObj.transform.Find("Icon").GetComponent<Image>());
+                });
+
+                createdButtons.Add(btnScript);
+            }
+
+            // 6. FINALIZE MANAGER
+            HorizonGUIFactory.ConfigureLogic<HorizonGUIManager>(systemRoot, m =>
+            {
+                m.Bind("clockText", clockTxt);
+                m.Bind("pageContentContainer", pagesContainer.transform);
+                m.BindArray("modules", createdModules);
+                m.BindArray("navigationButtons", createdButtons);
+            });
+
+            HorizonGUIBaker.BakeInterface(systemRoot.name);
+        }
+
+        [MenuItem("GameObject/Horizon/Create UI System", false, 10)]
+        public static void CreateNewSystem(MenuCommand menuCommand)
+        {
+            GameObject go = new GameObject("Horizon UI System");
+            GameObjectUtility.SetParentAndAlign(go, menuCommand.context as GameObject);
+            Undo.RegisterCreatedObjectUndo(go, "Create " + go.name);
+            Selection.activeObject = go;
+
+            var mgr = go.AddComponent<HorizonGUIManager>();
+
+            var auth = go.AddComponent<HorizonGUIAuthoring>();
+
+            auth.theme = HorizonGUIFactory.Theme;
         }
     }
 }

@@ -50,18 +50,19 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject scrollRoot = page.transform.parent.parent.gameObject;
 
             // 2. HEADER
-            var tTitle = HorizonGUIFactory.CreateText(page, "Weather Control", 48, Color.white, TextAlignmentOptions.Left);
-            tTitle.fontStyle = FontStyles.Bold;
+            var tTitle = HorizonGUIFactory.CreateText(page, "Weather Control", HorizonGUIFactory.TextStyle.H1, TextAlignmentOptions.Left);
             HorizonGUIFactory.SetLayoutSize(tTitle.gameObject, minH: 60);
 
             // STATUS ROW
             GameObject statusRow = HorizonGUIFactory.CreateRow("StatusRow", page, spacing: 10, padding: 0);
             HorizonGUIFactory.SetLayoutSize(statusRow, minH: 30);
 
-            var tStatus = HorizonGUIFactory.CreateText(statusRow, "Checking...", 24, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Left);
+            var tStatus = HorizonGUIFactory.CreateText(statusRow, "Checking...", HorizonGUIFactory.TextStyle.BodyDim, TextAlignmentOptions.Left);
             HorizonGUIFactory.SetLayoutSize(tStatus.gameObject, flexW: 0);
-            HorizonGUIFactory.CreateText(statusRow, "|", 24, new Color(1, 1, 1, 0.2f), TextAlignmentOptions.Left);
-            var tVersion = HorizonGUIFactory.CreateText(statusRow, $"v{version}", 24, new Color(1, 1, 1, 0.3f), TextAlignmentOptions.Left);
+
+            HorizonGUIFactory.CreateText(statusRow, "|", HorizonGUIFactory.TextStyle.BodyDim, TextAlignmentOptions.Left);
+            var tVersion = HorizonGUIFactory.CreateText(statusRow, $"v{version}", HorizonGUIFactory.TextStyle.BodyDim, TextAlignmentOptions.Left);
+
 
             GameObject sep = HorizonGUIFactory.CreatePanel("Sep", page, new Color(1, 1, 1, 0.2f), null);
             HorizonGUIFactory.SetLayoutSize(sep, minH: 2);
@@ -72,7 +73,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             Toggle toggle = HorizonGUIFactory.CreateToggle(page, "Use Real-Time Sync", true);
 
-            HorizonGUIFactory.CreateText(page, "Time of Day", 20, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Left);
+            HorizonGUIFactory.CreateText(page, "Time of Day", HorizonGUIFactory.TextStyle.SmallDim, TextAlignmentOptions.Left);
             Slider slider = HorizonGUIFactory.CreateSlider(page, 0f, 1f, 0.25f);
 
             // =========================================================
@@ -82,7 +83,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject sep2 = HorizonGUIFactory.CreatePanel("Sep2", page, new Color(1, 1, 1, 0.2f), null);
             HorizonGUIFactory.SetLayoutSize(sep2, minH: 2, prefH: 2);
 
-            HorizonGUIFactory.CreateText(page, "Conditions", 20, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Left);
+            HorizonGUIFactory.CreateText(page, "Conditions", HorizonGUIFactory.TextStyle.SmallDim, TextAlignmentOptions.Left);
 
             GameObject profilesRow = HorizonGUIFactory.CreateRow("ProfilesRow", page, spacing: 15, padding: 0);
             HorizonGUIFactory.SetLayoutSize(profilesRow, minH: 80);

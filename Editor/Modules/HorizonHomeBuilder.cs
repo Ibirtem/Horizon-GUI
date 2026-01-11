@@ -14,7 +14,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             // 1. LAYOUT & VISUALS 
             GameObject page = HorizonGUIFactory.CreateColumn($"Module_{ModuleName}", container, spacing: 20, padding: 20);
 
-            var tInfo = HorizonGUIFactory.CreateText(page, "Loading...", 24, HorizonGUIFactory.ColorTextDim, TMPro.TextAlignmentOptions.Left);
+            var tInfo = HorizonGUIFactory.CreateText(page, "Loading...", HorizonGUIFactory.TextStyle.BodyDim, TMPro.TextAlignmentOptions.Left);
             HorizonGUIFactory.SetLayoutSize(tInfo.gameObject, minH: 30);
 
             GameObject sep = HorizonGUIFactory.CreatePanel("Sep", page, new Color(1, 1, 1, 0.2f), null);

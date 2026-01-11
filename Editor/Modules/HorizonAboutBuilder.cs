@@ -37,14 +37,13 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             GameObject page = HorizonGUIFactory.CreateColumn($"Module_{ModuleName}", container, spacing: 10, padding: 30, align: TextAnchor.UpperCenter);
 
-            var tHeader = HorizonGUIFactory.CreateText(page, pkgName, 42, Color.white, TextAlignmentOptions.Center);
-            tHeader.fontStyle = FontStyles.Bold;
+            var tHeader = HorizonGUIFactory.CreateText(page, pkgName, HorizonGUIFactory.TextStyle.H2, TextAlignmentOptions.Center);
             HorizonGUIFactory.SetLayoutSize(tHeader.gameObject, minH: 50);
 
-            var tVer = HorizonGUIFactory.CreateText(page, $"Version: {version}", 24, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Center);
+            var tVer = HorizonGUIFactory.CreateText(page, $"Version: {version}", HorizonGUIFactory.TextStyle.BodyDim, TextAlignmentOptions.Center);
             HorizonGUIFactory.SetLayoutSize(tVer.gameObject, minH: 30);
 
-            var tAuth = HorizonGUIFactory.CreateText(page, "Author: Ibirtem", 24, HorizonGUIFactory.ColorTextDim, TextAlignmentOptions.Center);
+            var tAuth = HorizonGUIFactory.CreateText(page, "Author: Ibirtem", HorizonGUIFactory.TextStyle.BodyDim, TextAlignmentOptions.Center);
             HorizonGUIFactory.SetLayoutSize(tAuth.gameObject, minH: 30);
 
             // Spacer
@@ -106,7 +105,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             RectMask2D mask = textViewport.AddComponent<RectMask2D>();
             mask.padding = new Vector4(0, 0, 0, 0);
 
-            var tInput = HorizonGUIFactory.CreateText(textViewport, "", 18, new Color(1, 1, 1, 0.8f), TextAlignmentOptions.Left);
+            var tInput = HorizonGUIFactory.CreateText(textViewport, "", HorizonGUIFactory.TextStyle.Small, TextAlignmentOptions.Left);
             tInput.verticalAlignment = VerticalAlignmentOptions.Middle;
             HorizonGUIFactory.Stretch(tInput.gameObject);
 

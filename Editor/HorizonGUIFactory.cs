@@ -6,20 +6,55 @@ using UdonSharp;
 using System.IO;
 using VRC.SDK3.Components;
 using UdonSharpEditor;
+using BlackHorizon.HorizonGUI;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
     /// <summary>
     /// Core Factory class for generating the Horizon UI.
-    /// Handles the creation of GameObjects, UI components, and procedural assets (Sprites/Materials).
+    /// Handles the creation of GameObjects, UI components, and procedural assets.
     /// </summary>
     public static class HorizonGUIFactory
     {
-        // --- 1. CONSTANTS ---
-        public static readonly Color ColorGlassDark = new Color(1.0f, 1.0f, 1.0f, 0.1f);
-        public static readonly Color ColorSidebar = new Color(1.0f, 1.0f, 1.0f, 0.1f);
-        public static readonly Color ColorTextWhite = new Color(1, 1, 1, 0.9f);
-        public static readonly Color ColorTextDim = new Color(1, 1, 1, 0.5f);
+        // --- 1. THEME MANAGEMENT ---
+        private static HorizonTheme _currentTheme;
+        private static HorizonTheme _overrideTheme;
+
+        /// <summary>
+        /// Sets the theme for a specific build operation (e.g. from the manager).
+        /// </summary>
+        public static void SetThemeContext(HorizonTheme theme)
+        {
+            _overrideTheme = theme;
+        }
+
+        public static HorizonTheme Theme
+        {
+            get
+            {
+                if (_overrideTheme != null) return _overrideTheme;
+
+                if (_currentTheme == null)
+                {
+                    string[] guids = AssetDatabase.FindAssets("t:HorizonTheme");
+                    if (guids.Length > 0)
+                    {
+                        string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                        _currentTheme = AssetDatabase.LoadAssetAtPath<HorizonTheme>(path);
+                    }
+                    else
+                    {
+                        _currentTheme = ScriptableObject.CreateInstance<HorizonTheme>();
+                    }
+                }
+                return _currentTheme;
+            }
+        }
+
+        public static Color ColorGlassDark => Theme.glassColor;
+        public static Color ColorSidebar => Theme.panelColor;
+        public static Color ColorTextWhite => Theme.primaryColor;
+        public static Color ColorTextDim => Theme.secondaryColor;
 
         private const string GENERATED_SPRITE_PATH = "Assets/Horizon GUI/Textures/Horizon_RoundedBackground.png";
 
@@ -203,23 +238,110 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         public static Sprite LoadPackageSprite(string filename)
         {
-            string path = $"Packages/com.blackhorizon.horizongui/Runtime/Textures/{filename}";
-            return AssetDatabase.LoadAssetAtPath<Sprite>(path);
+            string searchName = Path.GetFileNameWithoutExtension(filename);
+
+            string[] guids = AssetDatabase.FindAssets(searchName);
+
+            if (guids.Length == 0)
+            {
+                Debug.LogWarning($"[HorizonGUI] Icon not found in project: {filename} (Search term: {searchName})");
+                return null;
+            }
+
+            string bestPath = null;
+            foreach (var guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+
+                if (!path.EndsWith(".png") && !path.EndsWith(".jpg") && !path.EndsWith(".psd"))
+                    continue;
+
+                if (path.Contains("Horizon") || path.Contains("GUI") || path.Contains("Textures"))
+                {
+                    bestPath = path;
+                    break;
+                }
+
+                if (bestPath == null) bestPath = path;
+            }
+
+            if (bestPath == null)
+            {
+                Debug.LogWarning($"[HorizonGUI] Found assets named '{searchName}', but none looked like a texture.");
+                return null;
+            }
+
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(bestPath);
+
+            if (sprite == null)
+            {
+                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(bestPath);
+                if (tex != null)
+                {
+                    sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                }
+            }
+
+            return sprite;
         }
 
         // --- TEXT & BUTTONS ---
 
-        public static TextMeshProUGUI CreateText(GameObject parent, string content, int fontSize, Color color, TextAlignmentOptions align = TextAlignmentOptions.Left)
+        public enum TextStyle
+        {
+            H1,
+            H2,
+            Body,
+            BodyDim,
+            Small,
+            SmallDim,
+            Clock
+        }
+
+        public static TextMeshProUGUI CreateText(GameObject parent, string content, TextStyle style, TextAlignmentOptions align = TextAlignmentOptions.Left)
         {
             GameObject go = CreateBlock("Label", parent);
             Stretch(go);
 
             TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
             tmp.text = content;
-            tmp.fontSize = fontSize;
-            tmp.color = color;
             tmp.alignment = align;
             tmp.raycastTarget = false;
+
+            switch (style)
+            {
+                case TextStyle.H1:
+                    tmp.fontSize = Theme.sizeH1;
+                    tmp.color = Theme.primaryColor;
+                    tmp.fontStyle = FontStyles.Bold;
+                    break;
+                case TextStyle.H2:
+                    tmp.fontSize = Theme.sizeH2;
+                    tmp.color = Theme.primaryColor;
+                    tmp.fontStyle = FontStyles.Bold;
+                    break;
+                case TextStyle.Body:
+                    tmp.fontSize = Theme.sizeBody;
+                    tmp.color = Theme.primaryColor;
+                    break;
+                case TextStyle.BodyDim:
+                    tmp.fontSize = Theme.sizeBody;
+                    tmp.color = Theme.secondaryColor;
+                    break;
+                case TextStyle.Small:
+                    tmp.fontSize = Theme.sizeSmall;
+                    tmp.color = Theme.primaryColor;
+                    break;
+                case TextStyle.SmallDim:
+                    tmp.fontSize = Theme.sizeSmall;
+                    tmp.color = Theme.secondaryColor;
+                    break;
+                case TextStyle.Clock:
+                    tmp.fontSize = Theme.sizeClock;
+                    tmp.color = Theme.secondaryColor;
+                    break;
+            }
+
             return tmp;
         }
 
@@ -500,19 +622,16 @@ namespace BlackHorizon.HorizonGUI.Editor
             // 2. Checkbox Background
             GameObject bgObj = CreatePanel("Background", container, new Color(1, 1, 1, 0.1f), GetOrGenerateRoundedSprite());
             SetLayoutSize(bgObj, minW: 60, minH: 60);
-
             bgObj.transform.localScale = Vector3.one * 0.5f;
-
             bgObj.GetComponent<Image>().raycastTarget = true;
 
             // 3. Checkmark (Icon inside)
-            GameObject checkObj = CreatePanel("Checkmark", bgObj, Color.white, GetOrGenerateRoundedSprite());
+            GameObject checkObj = CreatePanel("Checkmark", bgObj, Theme.primaryColor, GetOrGenerateRoundedSprite());
             Stretch(checkObj, 10);
 
             // 4. Label
-            CreateText(container, labelText, 24, ColorTextWhite, TextAlignmentOptions.Left);
+            CreateText(container, labelText, TextStyle.Body, TextAlignmentOptions.Left);
 
-            // 5. Component Logic
             Toggle toggle = container.AddComponent<Toggle>();
             toggle.isOn = isOn;
             toggle.targetGraphic = bgObj.GetComponent<Image>();

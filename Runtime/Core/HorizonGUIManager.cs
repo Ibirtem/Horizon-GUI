@@ -17,7 +17,7 @@ namespace BlackHorizon.HorizonGUI
     public class HorizonGUIManager : MonoBehaviour
 #endif
     {
-        [Header("Configuration")]
+        [Header("Runtime References")]
         public Transform pageContentContainer;
 
         [Header("Styling")]
