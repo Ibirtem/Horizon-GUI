@@ -13,7 +13,7 @@ namespace BlackHorizon.HorizonGUI
     public class HorizonGUI_AboutModule : HorizonGUIModule
     {
         [Header("About Data")]
-        public string githubUrl = "https://github.com/Ibirtem/WeatherSystem";
+        public string githubUrl = "https://github.com/Ibirtem/Horizon-GUI";
         public string boostyUrl = "https://boosty.to/ibirtem";
 
         [Header("References")]
@@ -48,6 +48,16 @@ namespace BlackHorizon.HorizonGUI
         {
             if (githubField != null) githubField.text = githubUrl;
             if (linkField != null) linkField.text = boostyUrl;
+        }
+
+        public void OpenTestModal()
+        {
+            var mgr = GetComponentInParent<HorizonGUIManager>();
+            if (mgr != null)
+            {
+                bool state = mgr.overlayContainer.activeSelf;
+                mgr.ToggleOverlay(!state);
+            }
         }
     }
 }

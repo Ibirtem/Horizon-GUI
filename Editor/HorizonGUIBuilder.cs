@@ -4,6 +4,8 @@ using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
 using UnityEngine.EventSystems;
+using UdonSharpEditor;
+using UnityEditor.Events;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
@@ -97,11 +99,37 @@ namespace BlackHorizon.HorizonGUI.Editor
                 createdButtons.Add(btnScript);
             }
 
-            // 6. FINALIZE MANAGER
+            // 6. OVERLAY LAYER
+            GameObject overlayObj = HorizonGUIFactory.CreateBlock("Overlay_Layer", canvasObj);
+            HorizonGUIFactory.Stretch(overlayObj);
+
+            // Dimmer
+            Image overlayBg = overlayObj.AddComponent<Image>();
+            overlayBg.color = new Color(0, 0, 0, 0.6f);
+            overlayBg.raycastTarget = true;
+
+            Button dismissBtn = overlayObj.AddComponent<Button>();
+            dismissBtn.transition = Selectable.Transition.None;
+
+            var mgrUdon = UdonSharpEditorUtility.GetBackingUdonBehaviour(manager);
+            if (mgrUdon != null)
+            {
+
+                UnityEventTools.AddStringPersistentListener(
+                    dismissBtn.onClick,
+                    mgrUdon.SendCustomEvent,
+                    "CloseOverlay"
+                );
+            }
+
+            overlayObj.SetActive(false);
+
+            // 7. FINALIZE MANAGER
             HorizonGUIFactory.ConfigureLogic<HorizonGUIManager>(systemRoot, m =>
             {
                 m.Bind("clockText", clockTxt);
                 m.Bind("pageContentContainer", pagesContainer.transform);
+                m.Bind("overlayContainer", overlayObj);
                 m.BindArray("modules", createdModules);
                 m.BindArray("navigationButtons", createdButtons);
             });

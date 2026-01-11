@@ -20,6 +20,13 @@ namespace BlackHorizon.HorizonGUI
         [Header("Runtime References")]
         public Transform pageContentContainer;
 
+        /// <summary>
+        /// A specialized high-priority canvas layer rendered on top of everything else.
+        /// Used for Modals, Alerts, and Popups. 
+        /// Controlled via ToggleOverlay().
+        /// </summary>
+        public GameObject overlayContainer;
+
         [Header("Styling")]
         public Color activeTabColor = new Color(1f, 1f, 1f, 0.2f);
         public Color inactiveTabColor = new Color(0f, 0f, 0f, 0.0f);
@@ -92,6 +99,27 @@ namespace BlackHorizon.HorizonGUI
                     navigationButtons[i].UpdateVisuals(i == _currentTabIndex, activeTabColor, inactiveTabColor);
                 }
             }
+        }
+
+        /// <summary>
+        /// Shows or hides the global overlay layer.
+        /// Use this when you want to block input to the rest of the UI and show a modal window.
+        /// </summary>
+        /// <param name="show">If true, enables the dark background and blocks underlying clicks.</param>
+        public void ToggleOverlay(bool show)
+        {
+            if (overlayContainer != null)
+            {
+                overlayContainer.SetActive(show);
+            }
+        }
+
+        /// <summary>
+        /// Helper method for UI Buttons to close the overlay (since they can't pass bools easily).
+        /// </summary>
+        public void CloseOverlay()
+        {
+            ToggleOverlay(false);
         }
     }
 }
