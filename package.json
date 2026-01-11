@@ -2,7 +2,7 @@
   "name": "com.blackhorizon.horizongui",
   "version": "0.1.0",
   "displayName": "Horizon GUI",
-  "description": "Procedural glass-morphism UI system for VRChat. Features auto-layout builder and Udon binder.",
+  "description": "A modular UI construction kit for VRChat. Features an auto-layout builder, theming system, and Udon binders.",
   "unity": "2022.3",
   "dependencies": {},
   "author": {

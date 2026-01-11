@@ -1,32 +1,37 @@
 # Horizon GUI 🎨
 
-**A modular toolkit for building interfaces in Unity & VRChat.**
+**A modular toolkit for building interfaces in VRChat.**
 
-Horizon provides a set of tools to construct responsive UIs and connect them to your game logic seamlessly. It serves as a bridge between visual elements and Udon code.
+Horizon is a system designed to bridge the gap between Udon code and visual UI elements. It helps you construct responsive menus, bind scripts automatically, and manage styles without getting lost in the Unity hierarchy.
 
 ---
 
 ## Key Features
 
-*   **Interface Toolkit**
-    A structured collection of utilities to build and manage UI layouts programmatically. Designed to simplify the creation of menus and HUDs without getting lost in the Unity hierarchy.
+- **Builder Workflow**
+  Generate complex layouts (Columns, Grids, Sidebars) programmatically or via configuration, rather than placing RectTransforms manually.
+- **Theme System**
+  Centralized "CSS-like" styling. Change colors and font sizes in one ScriptableObject, and the entire UI updates upon rebuild.
 
-*   **Glassmorphism**
-    Includes a custom **Background Blur** shader to create modern, frosted glass visuals that are optimized for VR performance.
+- **Auto-Binding**
+  Automatically detects UI components and links them to your UdonSharp behaviours. Removes the need for manual event assignment in the Inspector.
 
-*   **Auto-Binding**
-    Automatically detects UI components (Buttons, Sliders) and links them to your UdonSharp behaviours. Removes the need for manual event assignment in the Inspector.
-
-*   **Modular Architecture**
-    The system is built to be expandable. You can create your own modules and builders to fit specific project needs.
+- **Glassmorphism**
+  Includes a lightweight background blur shader optimized for VR.
 
 ---
 
 ## Quick Start
 
-1.  **Import** the package into your project.
-2.  Navigate to the top menu: `Horizon -> UI -> 2. Construct Main Layout`.
-3.  **Done!** The system generates the Canvas, Camera, and Event System automatically.
+1.  **Create the System:**
+    Right-click in the Hierarchy: `Horizon -> Create UI System`.
+2.  **Configure:**
+    Select the created object. You will see the **Horizon GUI Authoring** component.
+    Assign a **Theme** (Create one via `Create -> Horizon -> UI Theme` if needed).
+
+3.  **Build:**
+    Click the **"GENERATE INTERFACE"** button in the Inspector.
+    The system will construct the Canvas, layout, and link all Udon scripts automatically.
 
 ---
 
@@ -35,10 +40,13 @@ Horizon provides a set of tools to construct responsive UIs and connect them to 
 ```csharp
 public HorizonGUIModule BuildPage(GameObject container)
 {
-    // Use the toolkit to create a simple column
+    // Create a simple column
     var page = HorizonGUIFactory.CreateColumn("MyPage", container, spacing: 20);
 
-    // Add a pre-styled toggle
+    // Add a styled header
+    HorizonGUIFactory.CreateText(page, "Settings", HorizonGUIFactory.TextStyle.H1);
+
+    // Add a toggle
     var toggle = HorizonGUIFactory.CreateToggle(page, "Enable Magic", true);
 
     // Bind logic automatically
@@ -48,7 +56,3 @@ public HorizonGUIModule BuildPage(GameObject container)
     });
 }
 ```
-
-> **Note for Developers:**
-> To understand the full API and available controls (Columns, Rows, Grids, Sliders), please refer to the documentation comments inside:
-> `Packages/com.blackhorizon.horizongui/Editor/HorizonGUIFactory.cs`
