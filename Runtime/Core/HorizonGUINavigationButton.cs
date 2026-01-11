@@ -38,6 +38,10 @@ namespace BlackHorizon.HorizonGUI
             }
         }
 
+        /// <summary>
+        /// Updates only the state background. 
+        /// Interaction highlights (hover) are handled natively by the Button component on a separate layer.
+        /// </summary>
         public void UpdateVisuals(bool isActive, Color colActive, Color colInactive)
         {
             if (background != null)

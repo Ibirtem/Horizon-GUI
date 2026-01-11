@@ -346,37 +346,42 @@ namespace BlackHorizon.HorizonGUI.Editor
         }
 
         /// <summary>
-        /// Creates a standard Horizon UI Button structure.
-        /// Hierarchy: Root (Transparent, Button Logic) -> Icon (Image).
+        /// Creates a standard Horizon UI Button structure with independent layers for State and Interaction.
+        /// Hierarchy: Root -> Background (State) -> HoverOverlay (Interaction) -> Icon.
         /// </summary>
         public static GameObject CreateIconButton(string name, GameObject parent, Sprite bgSprite, Sprite iconSprite)
         {
-            // 1. Root Panel (Invisible background for hitbox)
+            // 1. Root & State Layer (Background)
             GameObject btnObj = CreatePanel(name, parent, new Color(1, 1, 1, 0.0f), bgSprite);
-            Image bgImg = btnObj.GetComponent<Image>();
-            bgImg.raycastTarget = true;
+            Image stateImg = btnObj.GetComponent<Image>();
+            stateImg.raycastTarget = true;
 
-            // 2. Icon Image
+            // 2. Interaction Layer (Hover/Press)
+            GameObject hoverObj = CreatePanel("Interaction_Overlay", btnObj, Color.white, bgSprite);
+            Stretch(hoverObj);
+            Image hoverImg = hoverObj.GetComponent<Image>();
+            hoverImg.raycastTarget = false;
+
+            // 3. Icon Layer
             GameObject iconObj = CreateBlock("Icon", btnObj);
             Stretch(iconObj, 20);
             Image iconImg = iconObj.AddComponent<Image>();
-            iconImg.color = Color.white;
+            iconImg.color = Theme.secondaryColor;
             iconImg.sprite = iconSprite;
             iconImg.preserveAspect = true;
             iconImg.raycastTarget = false;
 
-            // 3. Button Component
+            // 4. Button Component
             Button b = btnObj.AddComponent<Button>();
-            b.targetGraphic = bgImg;
+            b.targetGraphic = hoverImg;
             b.transition = Selectable.Transition.ColorTint;
 
-            // Set visual states (Invisible Normal, Visible Highlight/Press)
             ColorBlock cb = b.colors;
             cb.normalColor = new Color(1, 1, 1, 0f);
-            cb.highlightedColor = new Color(1, 1, 1, 0.1f);
-            cb.pressedColor = new Color(1, 1, 1, 0.3f);
+            cb.highlightedColor = new Color(1, 1, 1, 0.07f);
+            cb.pressedColor = new Color(1, 1, 1, 0.15f);
             cb.selectedColor = new Color(1, 1, 1, 0.0f);
-            cb.fadeDuration = 0.1f;
+            cb.fadeDuration = 0.05f;
             b.colors = cb;
 
             return btnObj;

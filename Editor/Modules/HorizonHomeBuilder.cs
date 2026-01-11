@@ -37,17 +37,6 @@ namespace BlackHorizon.HorizonGUI.Editor
                     item.backgroundImage.sprite = circle;
                     item.backgroundImage.type = Image.Type.Sliced;
                     item.backgroundImage.color = new Color(1, 1, 1, 0.1f);
-                    item.backgroundImage.raycastTarget = true;
-
-                    Button btn = item.GetComponent<Button>();
-                    if (btn != null)
-                    {
-                        var cb = btn.colors;
-                        cb.normalColor = Color.white;
-                        cb.highlightedColor = new Color(1, 1, 1, 1.2f);
-                        cb.pressedColor = new Color(0.7f, 0.7f, 0.7f, 1f);
-                        btn.colors = cb;
-                    }
                 }
 
                 if (item.iconImage != null)
@@ -55,7 +44,16 @@ namespace BlackHorizon.HorizonGUI.Editor
                     HorizonGUIFactory.Stretch(item.iconImage.gameObject, 0);
                     item.iconImage.sprite = circle;
                     item.iconImage.type = Image.Type.Sliced;
-                    item.iconImage.color = new Color(1, 1, 1, 0.8f);
+                    item.iconImage.color = new Color(1, 1, 1, 0.6f);
+                }
+
+                Transform hoverTrans = item.transform.Find("Interaction_Overlay");
+                if (hoverTrans != null)
+                {
+                    Image hoverImg = hoverTrans.GetComponent<Image>();
+                    hoverImg.sprite = circle;
+                    hoverImg.type = Image.Type.Sliced;
+                    hoverImg.color = Color.white;
                 }
 
                 if (item.titleText != null) item.titleText.gameObject.SetActive(false);
