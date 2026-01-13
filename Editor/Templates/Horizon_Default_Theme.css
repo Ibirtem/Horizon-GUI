@@ -1,0 +1,146 @@
+.app-layout {
+    flex-direction: row;
+    width: 1000px;
+    height: 600px;
+}
+
+.sidebar {
+    width: 80px;
+    background-color: #0000004D;
+    gap: 15px;
+    align-items: center;
+}
+
+.content-area {
+    flex-grow: 1;
+    height: 600px;
+    padding: 0px;
+}
+
+/* --- NAVIGATION --- */
+.nav-btn {
+    width: 80px;
+    height: 80px;
+    background-color: #FFFFFF0D;
+}
+
+.nav-btn icon {
+    color: #FFFFFFCC;
+}
+
+.spacer {
+    flex-grow: 1;
+}
+
+/* --- HEADER --- */
+.header-row {
+    flex-direction: row;
+    height: 80px;
+    padding-right: 20px;
+    align-items: center;
+}
+
+.clock-text {
+    font-size: 54px;
+    color: #FFFFFF80;
+    text-align: right;
+}
+
+/* --- MODULES --- */
+.modules-stack {
+    flex-grow: 1;
+    padding: 20px;
+}
+
+.module-page {
+    flex-grow: 1;
+    gap: 15px;
+}
+
+/* --- UTILS --- */
+.separator {
+    height: 2px;
+    background-color: #FFFFFF33;
+    width: 100%;
+}
+
+.short-sep {
+    width: 400px;
+}
+
+.row {
+    flex-direction: row;
+    gap: 10px;
+    align-items: center;
+}
+
+.dim-text {
+    color: #FFFFFF80;
+    font-size: 24px;
+}
+
+/* --- WEATHER SPECIFIC --- */
+.scroll-view {
+    flex-grow: 1;
+}
+
+.status-row {
+    padding-bottom: 15px;
+}
+
+hr {
+    height: 5px;
+    padding: 10px;
+    background-color: #FFFFFF33;
+}
+
+label {
+    font-size: 24px;
+    color: #FFFFFF80;
+    margin-top: 10px;
+}
+
+toggle {
+    gap: 20px;
+    font-size: 28px;
+    height: 50px;
+}
+
+.weather-controls {
+    gap: 20px;
+    padding-top: 15px;
+    padding-bottom: 15px;
+}
+
+.profile-btn {
+    width: 80px;
+    height: 80px;
+    padding: 0px;
+}
+
+.profile-btn icon {
+    width: 52px;
+    height: 52px;
+    color: #FFFFFFCC;
+}
+
+.profile-row {
+    height: 90px;
+    gap: 20px;
+}
+
+/* --- ABOUT SPECIFIC --- */
+.links-container {
+    gap: 15px;
+}
+
+.link-row {
+    flex-direction: row;
+    width: 850px;
+    gap: 15px;
+    align-items: center;
+}
+
+.link-row input {
+    flex-grow: 1;
+}

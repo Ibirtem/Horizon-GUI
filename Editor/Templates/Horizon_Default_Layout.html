@@ -1,0 +1,92 @@
+<div class="app-layout">
+
+    <!-- 1. SIDEBAR -->
+    <div class="sidebar">
+        <button class="nav-btn" u-click="OnNavHome" u-bind="btnNavHome">
+            <icon src="house_with_garden.png" />
+        </button>
+
+        <button class="nav-btn" u-click="OnNavWeather" u-bind="btnNavWeather">
+            <icon src="partly_sunny_rain.png" />
+        </button>
+
+        <div class="spacer"></div>
+
+        <button class="nav-btn" u-click="OnNavAbout" u-bind="btnNavAbout">
+            <icon src="information_source.png" />
+        </button>
+    </div>
+
+    <!-- 2. CONTENT AREA -->
+    <div class="content-area">
+        <div class="header-row">
+            <div class="spacer"></div>
+            <text class="clock-text" u-bind="clockText">01 Jan, 12:00</text>
+        </div>
+        <hr />
+
+        <div class="modules-stack">
+            <!-- HOME -->
+            <module id="Module_Home" class="module-page">
+                <text class="dim-text" u-bind="instanceInfoText">Loading...</text>
+                <hr />
+                <h-grid id="PlayerGrid" style="circle" pool="64" cell-w="64" cell-h="64" spacing="15"
+                    u-bind="playerGrid" u-click="OnPlayerSlotClicked"></h-grid>
+            </module>
+
+            <!-- WEATHER -->
+            <module id="Module_Weather" class="module-page" style="display:none;" u-script="HorizonGUI_WeatherModule">
+                <scroll class="scroll-view">
+                    <h1>Weather Control</h1>
+                    <div class="row status-row">
+                        <text u-bind="weatherStatusText" class="dim-text">Status: Checking...</text>
+                        <text class="dim-text">|</text>
+                        <text class="dim-text" u-bind="weatherVersionText">v?.?.?</text>
+                    </div>
+                    <hr />
+
+                    <div class="weather-controls">
+                        <toggle u-bind="realTimeToggle" u-click="OnRealTimeChanged">Use Real-Time Sync</toggle>
+
+                        <label>Time of Day</label>
+                        <input type="range" min="0" max="1" value="0.25" u-bind="timeSlider"
+                            u-click="OnTimeSliderChanged" />
+
+                        <hr />
+                        <label>Conditions</label>
+                        <div class="row profile-row">
+                            <button class="nav-btn profile-btn" u-click="OnProfileClear">
+                                <icon src="partly_sunny.png" />
+                            </button>
+                            <button class="nav-btn profile-btn" u-click="OnProfileSnow">
+                                <icon src="snow_cloud.png" />
+                            </button>
+                            <button class="nav-btn profile-btn" u-click="OnProfileRain">
+                                <icon src="rain_cloud.png" />
+                            </button>
+                        </div>
+                    </div>
+                </scroll>
+            </module>
+
+            <!-- ABOUT -->
+            <module id="Module_About" class="module-page" style="display:none;">
+                <h2>Horizon GUI</h2>
+                <text class="dim-text">Version: 0.1.0</text>
+                <text class="dim-text">Author: Ibirtem</text>
+                <hr />
+
+                <div class="links-container">
+                    <div class="link-row">
+                        <icon src="icon_github.png" />
+                        <input type="text" value="https://github.com/Ibirtem/Horizon-GUI" />
+                    </div>
+                    <div class="link-row">
+                        <icon src="icon_boosty.png" />
+                        <input type="text" value="https://boosty.to/ibirtem" />
+                    </div>
+                </div>
+            </module>
+        </div>
+    </div>
+</div>

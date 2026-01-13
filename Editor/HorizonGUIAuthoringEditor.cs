@@ -36,17 +36,30 @@ namespace BlackHorizon.HorizonGUI
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
+            HorizonGUIAuthoring authoring = (HorizonGUIAuthoring)target;
 
             // 1. HEADER
             HorizonEditorUtils.DrawHorizonHeader("UI COMPILER", this);
 
-            HorizonGUIAuthoring authoring = (HorizonGUIAuthoring)target;
-
             // 2. TEMPLATE SOURCE
             HorizonEditorUtils.DrawSectionHeader("TEMPLATE SOURCE");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
             EditorGUILayout.PropertyField(_htmlFileProp, new GUIContent("HTML Layout"));
             EditorGUILayout.PropertyField(_cssFileProp, new GUIContent("CSS Styles"));
+
+            EditorGUILayout.BeginHorizontal();
+            GUILayout.FlexibleSpace();
+            if (GUILayout.Button("Load Defaults", GUILayout.Width(100)))
+            {
+                if (EditorUtility.DisplayDialog("Horizon GUI", "Replace current files with default templates?", "Yes", "Cancel"))
+                {
+                    HorizonGUIBuilder.SetupDefaultTemplates(authoring);
+                    serializedObject.Update();
+                }
+            }
+            EditorGUILayout.EndHorizontal();
+
             EditorGUILayout.EndVertical();
 
             // 3. LOGIC BINDING
@@ -74,7 +87,6 @@ namespace BlackHorizon.HorizonGUI
                     EditorUtility.DisplayDialog("Horizon GUI", "Please assign an HTML file first!", "OK");
                     return;
                 }
-
                 BuildInterface(authoring);
             }
             GUI.backgroundColor = Color.white;
