@@ -353,7 +353,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             taRect.anchorMin = Vector2.zero; taRect.anchorMax = Vector2.one;
             taRect.offsetMin = new Vector2(10, 0); taRect.offsetMax = new Vector2(-10, 0);
 
-            var t = HorizonGUIFactory.CreateText(textArea, "", HorizonGUIFactory.TextStyle.Body);
+            string initialText = node.Attributes.ContainsKey("value") ? node.Attributes["value"] : "";
+
+            var t = HorizonGUIFactory.CreateText(textArea, initialText, HorizonGUIFactory.TextStyle.Body);
             t.color = Color.white;
 
             GameObject placeObj = HorizonGUIFactory.CreateBlock("Placeholder", textArea);
@@ -368,6 +370,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             inp.textComponent = t;
             inp.placeholder = p;
             inp.targetGraphic = img;
+            inp.text = initialText;
 
             if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
             BoxCollider col = root.AddComponent<BoxCollider>();

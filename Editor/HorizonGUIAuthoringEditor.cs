@@ -220,6 +220,7 @@ namespace BlackHorizon.HorizonGUI
 
         /// <summary>
         /// Automatically links generated modules and external systems (like Weather) to the HorizonGUIManager.
+        /// Also bakes static data (like version strings) directly into the UI text components.
         /// </summary>
         private void PerformLogicBinding(HorizonGUIAuthoring authoring, GameObject contentRoot)
         {
@@ -236,7 +237,22 @@ namespace BlackHorizon.HorizonGUI
             if (wSys != null)
             {
                 binder.Bind("weatherSystem", wSys);
-                binder.BindVal("weatherVersion", GetPackageVersion("com.blackhorizon.horizonweathertime"));
+                binder.Apply();
+
+                if (manager.weatherVersionText != null)
+                {
+                    string ver = GetPackageVersion("com.blackhorizon.horizonweathertime");
+
+                    SerializedObject textSO = new SerializedObject(manager.weatherVersionText);
+                    SerializedProperty textProp = textSO.FindProperty("m_text");
+                    if (textProp != null)
+                    {
+                        textProp.stringValue = $"v{ver}";
+                        textSO.ApplyModifiedProperties();
+                    }
+                }
+
+                return;
             }
 
             binder.Apply();

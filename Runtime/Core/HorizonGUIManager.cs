@@ -45,13 +45,6 @@ namespace BlackHorizon.HorizonGUI
         public Toggle realTimeToggle;
         public Slider timeSlider;
 
-        [Tooltip("Baked version of the connected weather system.")]
-        public string weatherVersion = "?.?.?";
-
-        [Header("Module Specific Fields")]
-        public TMP_InputField githubField;
-        public TMP_InputField linkField;
-
         private int _currentTabIndex = 0;
 
         /// <summary>
@@ -78,9 +71,6 @@ namespace BlackHorizon.HorizonGUI
 
         private void InitializeUI()
         {
-            if (githubField != null) githubField.text = "https://github.com/Ibirtem/Horizon-GUI";
-            if (linkField != null) linkField.text = "https://boosty.to/ibirtem";
-
             UpdatePlayerList();
             SyncWeatherUI();
         }
@@ -187,8 +177,6 @@ namespace BlackHorizon.HorizonGUI
         private void SyncWeatherUI()
         {
             if (weatherSystem == null) return;
-
-            if (weatherVersionText != null) weatherVersionText.text = $"v{weatherVersion}";
             if (weatherStatusText != null) weatherStatusText.text = "Status: <color=#33FF33>Connected</color>";
             if (realTimeToggle != null) realTimeToggle.isOn = weatherSystem.useRealTime;
 
