@@ -127,7 +127,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// <param name="size">The size of the interaction area (width, height).</param>
         public static void AddInteraction(GameObject go, Vector2 size)
         {
-            go.layer = 0; 
+            go.layer = 0;
 
             BoxCollider col = go.GetComponent<BoxCollider>();
             if (col == null)
@@ -220,7 +220,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         public static Sprite LoadPackageSprite(string filename)
         {
             string searchName = Path.GetFileNameWithoutExtension(filename);
-            
+
             string[] guids = AssetDatabase.FindAssets(searchName);
 
             if (guids.Length == 0)
@@ -299,15 +299,20 @@ namespace BlackHorizon.HorizonGUI.Editor
         public static GameObject CreateIconButton(string name, GameObject parent, Sprite bgSprite, Sprite iconSprite)
         {
             GameObject btnObj = CreatePanel(name, parent, new Color(1, 1, 1, 0.0f), bgSprite);
+            btnObj.GetComponent<Image>().pixelsPerUnitMultiplier = 1.0f;
             btnObj.GetComponent<Image>().raycastTarget = true;
 
             GameObject hoverObj = CreatePanel("Interaction_Overlay", btnObj, Color.white, bgSprite);
             Stretch(hoverObj);
+
+            hoverObj.GetComponent<Image>().pixelsPerUnitMultiplier = 1.0f;
+
             hoverObj.GetComponent<Image>().raycastTarget = false;
             hoverObj.AddComponent<LayoutElement>().ignoreLayout = true;
 
             GameObject iconObj = CreateBlock("Icon", btnObj);
             RectTransform iconRect = iconObj.GetComponent<RectTransform>();
+
             iconRect.anchorMin = new Vector2(0.22f, 0.22f);
             iconRect.anchorMax = new Vector2(0.78f, 0.78f);
             iconRect.offsetMin = Vector2.zero;
@@ -514,7 +519,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// </summary>
         public static HorizonDataGrid CreateDataGrid(string name, GameObject parent, int poolSize, Vector2 cellSize, UdonSharpBehaviour eventTarget = null, string eventName = "OnItemSelected", bool useCircleStyle = false)
         {
-            GameObject gridObj = CreateGrid(name, parent, cellSize, new Vector2(10, 10), flexGrow: 1, padding: 10);
+            GameObject gridObj = CreateGrid(name, parent, cellSize, Vector2.zero, flexGrow: 1, padding: 10);
             var manager = AttachLogic<HorizonDataGrid>(gridObj);
             Sprite circleSprite = GetOrGenerateRoundedSprite();
             var slots = new System.Collections.Generic.List<HorizonGridItem>();
@@ -522,15 +527,18 @@ namespace BlackHorizon.HorizonGUI.Editor
             for (int i = 0; i < poolSize; i++)
             {
                 GameObject slotObj = CreateIconButton($"Slot_{i:00}", gridObj, circleSprite, null);
+
+                Transform iconTr = slotObj.transform.Find("Icon");
+                if (iconTr != null) Stretch(iconTr.gameObject, 0);
+
                 if (useCircleStyle)
                 {
                     Image bg = slotObj.GetComponent<Image>();
                     bg.color = new Color(1, 1, 1, 0.1f);
-                    Transform icon = slotObj.transform.Find("Icon");
-                    if (icon != null)
+                    if (iconTr != null)
                     {
-                        Image iconImg = icon.GetComponent<Image>();
-                        Stretch(icon.gameObject, 0);
+                        Image iconImg = iconTr.GetComponent<Image>();
+                        Stretch(iconTr.gameObject, 0);
                         iconImg.sprite = circleSprite;
                         iconImg.type = Image.Type.Sliced;
                         iconImg.color = new Color(1, 1, 1, 0.6f);
@@ -577,7 +585,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
 
             var input = esObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-            // Standard VRChat/Unity input axes
+
             input.horizontalAxis = "Horizontal";
             input.verticalAxis = "Vertical";
         }
@@ -695,12 +703,12 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject handleArea = CreateBlock("Handle Slide Area", container);
             Stretch(handleArea);
             RectTransform haRect = handleArea.GetComponent<RectTransform>();
-            haRect.offsetMin = new Vector2(20, 0);
-            haRect.offsetMax = new Vector2(-20, 0);
+            haRect.offsetMin = new Vector2(0, 0);
+            haRect.offsetMax = new Vector2(0, 0);
 
             GameObject handle = CreatePanel("Handle", handleArea, Color.white, GetOrGenerateRoundedSprite());
             RectTransform hRect = handle.GetComponent<RectTransform>();
-            hRect.sizeDelta = new Vector2(40, 40);
+            hRect.sizeDelta = new Vector2(40, 0);
             hRect.anchorMin = new Vector2(0, 0.5f);
             hRect.anchorMax = new Vector2(0, 0.5f);
             Image hImg = handle.GetComponent<Image>();

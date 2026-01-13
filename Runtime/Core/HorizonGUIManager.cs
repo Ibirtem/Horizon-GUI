@@ -86,7 +86,7 @@ namespace BlackHorizon.HorizonGUI
         private void UpdateSystemClock()
         {
             if (clockText != null)
-                clockText.text = System.DateTime.Now.ToString("dd MMM, HH:mm");
+                clockText.text = System.DateTime.Now.ToString("dd MMMM, HH:mm");
         }
 
         #endregion

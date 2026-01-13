@@ -199,10 +199,15 @@ namespace BlackHorizon.HorizonGUI
 
             LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
 
-            foreach (var btn in canvasObj.GetComponentsInChildren<Button>())
+            var allSelectables = new System.Collections.Generic.List<Selectable>();
+            allSelectables.AddRange(canvasObj.GetComponentsInChildren<Button>());
+            allSelectables.AddRange(canvasObj.GetComponentsInChildren<Toggle>());
+
+            foreach (var uiElement in allSelectables)
             {
-                BoxCollider col = btn.GetComponent<BoxCollider>();
-                RectTransform rt = btn.GetComponent<RectTransform>();
+                BoxCollider col = uiElement.GetComponent<BoxCollider>();
+                RectTransform rt = uiElement.GetComponent<RectTransform>();
+
                 if (col != null && rt != null)
                 {
                     col.size = new Vector3(rt.rect.width, rt.rect.height, 10f);

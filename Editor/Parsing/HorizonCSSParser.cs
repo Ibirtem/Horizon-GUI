@@ -18,8 +18,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <summary>
         /// Calculates the final style for a node by applying rules in order of specificity:
         /// 1. Tag styles (lowest)
-        /// 2. Class styles (medium)
-        /// 3. ID styles (highest)
+        /// 2. Parent Context styles (e.g. ".parentClass tagName")
+        /// 3. Class styles (medium)
+        /// 4. ID styles (highest)
         /// </summary>
         /// <param name="node">The target node to compute styles for.</param>
         /// <returns>A dictionary containing all merged style properties.</returns>
@@ -27,9 +28,25 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         {
             var computed = new Dictionary<string, string>();
 
+            // 1. Tag (e.g. "icon")
             if (Rules.ContainsKey(node.Tag))
                 Merge(computed, Rules[node.Tag]);
 
+            if (node.Parent != null && node.Parent.Attributes.TryGetValue("class", out string pClassAttr))
+            {
+                string[] pClasses = pClassAttr.Split(' ');
+                foreach (var pc in pClasses)
+                {
+                    string cleanParentClass = pc.Trim();
+                    if (string.IsNullOrEmpty(cleanParentClass)) continue;
+
+                    string ctxSelector = $".{cleanParentClass} {node.Tag}";
+                    if (Rules.ContainsKey(ctxSelector))
+                        Merge(computed, Rules[ctxSelector]);
+                }
+            }
+
+            // 3. Class (e.g. ".my-icon")
             if (node.Attributes.TryGetValue("class", out string classAttr))
             {
                 string[] classes = classAttr.Split(' ');
@@ -41,6 +58,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 }
             }
 
+            // 4. ID (e.g. "#my-icon")
             if (node.Attributes.TryGetValue("id", out string idAttr))
             {
                 string selector = "#" + idAttr.Trim();

@@ -141,15 +141,34 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
         /// <summary>
         /// Constructs a thin horizontal line (separator).
+        /// Uses a wrapper structure to allow for internal padding (indentation).
         /// </summary>
         private static GameObject BuildSeparator(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            GameObject go = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.2f), null);
-            float h = styles.ContainsKey("height") ? ParseFloat(styles, "height", 2) : 2;
-            ApplyLayoutStyles(go, styles);
-            ApplyContainerStyles(go, styles, node);
-            HorizonGUIFactory.SetLayoutSize(go, minH: h, prefH: h, flexH: 0);
-            return go;
+            float height = styles.ContainsKey("height") ? ParseFloat(styles, "height", 5) : 5;
+            float padding = ParseFloat(styles, "padding", 0);
+            float width = ParseFloat(styles, "width", -1);
+
+            GameObject wrapper = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
+
+            GameObject line = HorizonGUIFactory.CreatePanel("Visual_Line", wrapper, new Color(1, 1, 1, 0.2f), null);
+
+            ApplyContainerStyles(line, styles, node);
+
+            HorizonGUIFactory.SetLayoutSize(wrapper,
+                minH: height,
+                prefH: height,
+                prefW: width > 0 ? width : (float?)null,
+                flexW: width > 0 ? 0 : 1
+            );
+
+            RectTransform lineRect = line.GetComponent<RectTransform>();
+            lineRect.anchorMin = Vector2.zero;
+            lineRect.anchorMax = Vector2.one;
+            lineRect.offsetMin = new Vector2(padding, 0);
+            lineRect.offsetMax = new Vector2(-padding, 0);
+
+            return wrapper;
         }
 
         /// <summary>
@@ -170,7 +189,12 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             int pool = ParseInt(node.Attributes, "pool", 64);
             float w = ParseFloat(node.Attributes, "cell-w", 100);
             float h = ParseFloat(node.Attributes, "cell-h", 100);
-            float spacing = ParseFloat(node.Attributes, "spacing", 10);
+
+            if (!styles.ContainsKey("gap") && !styles.ContainsKey("spacing"))
+            {
+                float attrSpacing = ParseFloat(node.Attributes, "spacing", 10);
+                styles["gap"] = $"{attrSpacing}px";
+            }
 
             bool isCircle = false;
             if (node.Attributes.TryGetValue("style", out string styleVal))
@@ -196,10 +220,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             );
 
             GameObject go = manager.gameObject;
-            if (go.GetComponent<GridLayoutGroup>() is GridLayoutGroup glg)
-            {
-                glg.spacing = new Vector2(spacing, spacing);
-            }
 
             ApplyLayoutStyles(go, styles);
             ApplyContainerStyles(go, styles, node);
@@ -353,9 +373,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             BoxCollider col = root.AddComponent<BoxCollider>();
             col.isTrigger = true;
 
-            HorizonGUIFactory.SetLayoutSize(root, minH: 40, prefH: 40);
+            HorizonGUIFactory.SetLayoutSize(root, minH: 50, prefH: 50);
+
             ApplyContainerStyles(root, styles, node);
             ApplyLayoutStyles(root, styles);
+
+            LayoutElement le = root.GetComponent<LayoutElement>();
+            if (le != null) le.flexibleHeight = 0;
 
             return root;
         }
@@ -365,10 +389,14 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static GameObject BuildToggle(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            GameObject root = HorizonGUIFactory.CreateRow(GetNodeName(node), parent, spacing: 10, align: TextAnchor.MiddleLeft);
+            float spacing = styles.ContainsKey("gap") ? ParseFloat(styles, "gap", 15) : 15;
+
+            GameObject root = HorizonGUIFactory.CreateRow(GetNodeName(node), parent, spacing: spacing, align: TextAnchor.MiddleLeft);
 
             GameObject bgObj = HorizonGUIFactory.CreatePanel("Background", root, new Color(1, 1, 1, 0.1f), HorizonGUIFactory.GetOrGenerateRoundedSprite());
-            HorizonGUIFactory.SetLayoutSize(bgObj, 32, 32, 32, 32);
+            HorizonGUIFactory.SetLayoutSize(bgObj, 40, 40, 40, 40);
+
+            bgObj.GetComponent<Image>().raycastTarget = true;
 
             GameObject checkObj = HorizonGUIFactory.CreatePanel("Checkmark", bgObj, Color.white, HorizonGUIFactory.LoadPackageSprite("checkmark.png"));
             RectTransform checkRect = checkObj.GetComponent<RectTransform>();
@@ -380,9 +408,19 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             tog.graphic = checkObj.GetComponent<Image>();
             tog.isOn = false;
 
+            tog.transition = Selectable.Transition.ColorTint;
+            ColorBlock cb = tog.colors;
+            cb.normalColor = new Color(1, 1, 1, 0.1f);
+            cb.highlightedColor = new Color(1, 1, 1, 0.25f);
+            cb.pressedColor = new Color(1, 1, 1, 0.4f);
+            cb.selectedColor = new Color(1, 1, 1, 0.1f);
+            cb.fadeDuration = 0.1f;
+            tog.colors = cb;
+
             if (!string.IsNullOrEmpty(node.TextContent))
             {
-                HorizonGUIFactory.CreateText(root, node.TextContent, HorizonGUIFactory.TextStyle.Body);
+                var label = HorizonGUIFactory.CreateText(root, node.TextContent, HorizonGUIFactory.TextStyle.Body);
+                ApplyTextStyles(label, styles);
             }
 
             if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
@@ -508,7 +546,12 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
             float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
-            int padding = (int)ParseFloat(styles, "padding", 0);
+
+            int pAll = (int)ParseFloat(styles, "padding", 0);
+            int pTop = (int)ParseFloat(styles, "padding-top", pAll);
+            int pBot = (int)ParseFloat(styles, "padding-bottom", pAll);
+            int pLeft = (int)ParseFloat(styles, "padding-left", pAll);
+            int pRight = (int)ParseFloat(styles, "padding-right", pAll);
 
             TextAnchor align = TextAnchor.UpperLeft;
             if (styles.TryGetValue("align-items", out string alignVal))
@@ -530,7 +573,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (lg != null)
             {
-                lg.padding = new RectOffset(padding, padding, padding, padding);
+                lg.padding = new RectOffset(pLeft, pRight, pTop, pBot);
 
                 if (lg is HorizontalLayoutGroup hlg)
                 {
@@ -554,7 +597,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (go.GetComponent<GridLayoutGroup>() is GridLayoutGroup glg)
             {
-                glg.padding = new RectOffset(padding, padding, padding, padding);
+                glg.padding = new RectOffset(pLeft, pRight, pTop, pBot);
                 glg.spacing = new Vector2(spacing, spacing);
             }
         }
@@ -597,8 +640,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static void ApplyTextStyles(TextMeshProUGUI tmp, Dictionary<string, string> styles)
         {
-            if (styles.TryGetValue("color", out string hex)) { if (ColorUtility.TryParseHtmlString(hex, out Color col)) tmp.color = col; }
-            if (styles.TryGetValue("font-size", out string sizeStr)) { if (float.TryParse(sizeStr, out float size)) tmp.fontSize = size; }
+            if (styles.TryGetValue("color", out string hex))
+            {
+                if (ColorUtility.TryParseHtmlString(hex, out Color col)) tmp.color = col;
+            }
+
+            if (styles.ContainsKey("font-size"))
+            {
+                float size = ParseFloat(styles, "font-size", tmp.fontSize);
+                tmp.fontSize = size;
+            }
+
             if (styles.TryGetValue("text-align", out string align))
             {
                 if (align == "center") tmp.alignment = TextAlignmentOptions.Center;
