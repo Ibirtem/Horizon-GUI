@@ -18,26 +18,54 @@ namespace BlackHorizon.HorizonGUI
         private const float DEFAULT_CANVAS_HEIGHT = 600f;
 
         [System.Serializable]
-        private class PackageInfo { public string version; }
+        private class LocalPackageJson { public string version; }
+
+        private SerializedProperty _htmlFileProp;
+        private SerializedProperty _cssFileProp;
+        private SerializedProperty _backingLogicProp;
+        private SerializedProperty _clearOnBuildProp;
+
+        private void OnEnable()
+        {
+            _htmlFileProp = serializedObject.FindProperty("htmlFile");
+            _cssFileProp = serializedObject.FindProperty("cssFile");
+            _backingLogicProp = serializedObject.FindProperty("backingLogic");
+            _clearOnBuildProp = serializedObject.FindProperty("clearOnBuild");
+        }
 
         public override void OnInspectorGUI()
         {
-            GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel)
-            {
-                fontSize = 13,
-                alignment = TextAnchor.MiddleCenter
-            };
+            serializedObject.Update();
 
-            GUILayout.Space(10);
-            GUILayout.Label("HORIZON UI COMPILER", headerStyle);
-            GUILayout.Space(5);
+            // 1. HEADER
+            HorizonEditorUtils.DrawHorizonHeader("UI COMPILER", this);
 
             HorizonGUIAuthoring authoring = (HorizonGUIAuthoring)target;
 
-            base.OnInspectorGUI();
+            // 2. TEMPLATE SOURCE
+            HorizonEditorUtils.DrawSectionHeader("TEMPLATE SOURCE");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.PropertyField(_htmlFileProp, new GUIContent("HTML Layout"));
+            EditorGUILayout.PropertyField(_cssFileProp, new GUIContent("CSS Styles"));
+            EditorGUILayout.EndVertical();
 
-            GUILayout.Space(15);
+            // 3. LOGIC BINDING
+            HorizonEditorUtils.DrawSectionHeader("LOGIC & BINDING");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+            EditorGUILayout.PropertyField(_backingLogicProp, new GUIContent("Root Logic Script"));
+            if (_backingLogicProp.objectReferenceValue == null)
+            {
+                EditorGUILayout.HelpBox("A Root Logic Script is required to handle global events.", MessageType.Warning);
+            }
+            EditorGUILayout.EndVertical();
 
+            // 4. SETTINGS
+            HorizonEditorUtils.DrawSectionHeader("BUILD SETTINGS");
+            EditorGUILayout.PropertyField(_clearOnBuildProp);
+
+            EditorGUILayout.Space(15);
+
+            // 5. ACTION
             GUI.backgroundColor = new Color(0.7f, 0.9f, 1f);
             if (GUILayout.Button("COMPILE INTERFACE", GUILayout.Height(40)))
             {
@@ -50,6 +78,8 @@ namespace BlackHorizon.HorizonGUI
                 BuildInterface(authoring);
             }
             GUI.backgroundColor = Color.white;
+
+            serializedObject.ApplyModifiedProperties();
         }
 
         /// <summary>
@@ -292,7 +322,7 @@ namespace BlackHorizon.HorizonGUI
                         if (System.IO.File.Exists(jsonPath))
                         {
                             string json = System.IO.File.ReadAllText(jsonPath);
-                            var localPkg = JsonUtility.FromJson<PackageInfo>(json);
+                            var localPkg = JsonUtility.FromJson<LocalPackageJson>(json);
                             if (localPkg != null && !string.IsNullOrEmpty(localPkg.version)) return localPkg.version;
                         }
 
