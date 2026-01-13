@@ -44,7 +44,9 @@ namespace BlackHorizon.HorizonGUI
         public TextMeshProUGUI weatherVersionText;
         public Toggle realTimeToggle;
         public Slider timeSlider;
-        [System.NonSerialized] public string weatherVersion = "?.?.?";
+
+        [Tooltip("Baked version of the connected weather system.")]
+        public string weatherVersion = "?.?.?";
 
         [Header("Module Specific Fields")]
         public TMP_InputField githubField;

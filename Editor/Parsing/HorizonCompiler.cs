@@ -465,6 +465,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 Button btn = obj.GetComponent<Button>();
                 Toggle tog = obj.GetComponent<Toggle>();
+                Slider sld = obj.GetComponent<Slider>();
 
                 UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(_targetLogic);
                 if (backing == null) backing = _targetLogic.GetComponent<UdonBehaviour>();
@@ -477,11 +478,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                         for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(btn.onClick, i);
                         UnityEventTools.AddStringPersistentListener(btn.onClick, backing.SendCustomEvent, methodName);
                     }
-                    if (tog != null)
+                    else if (tog != null)
                     {
                         int count = tog.onValueChanged.GetPersistentEventCount();
                         for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(tog.onValueChanged, i);
                         UnityEventTools.AddStringPersistentListener(tog.onValueChanged, backing.SendCustomEvent, methodName);
+                    }
+                    else if (sld != null)
+                    {
+                        int count = sld.onValueChanged.GetPersistentEventCount();
+                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(sld.onValueChanged, i);
+                        UnityEventTools.AddStringPersistentListener(sld.onValueChanged, backing.SendCustomEvent, methodName);
                     }
                 }
             }

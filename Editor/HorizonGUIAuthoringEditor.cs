@@ -243,24 +243,49 @@ namespace BlackHorizon.HorizonGUI
         }
 
         /// <summary>
-        /// Retrieves the version string from a package's package.json file.
-        /// Logs a warning if the file cannot be read.
+        /// Retrieves the version by locating the main script and checking its package context.
+        /// Works for UPM (Registry/Local/Git) and raw Assets folders.
         /// </summary>
-        private string GetPackageVersion(string packageName)
+        private string GetPackageVersion(string ignoredPackageName)
         {
-            try
+            string[] guids = AssetDatabase.FindAssets("WeatherTimeSystem");
+
+            if (guids.Length > 0)
             {
-                string path = $"Packages/{packageName}/package.json";
-                if (System.IO.File.Exists(path))
+                string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+
+                var upmInfo = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
+                if (upmInfo != null)
                 {
-                    var pkg = JsonUtility.FromJson<PackageInfo>(System.IO.File.ReadAllText(path));
-                    return pkg.version;
+                    return upmInfo.version;
+                }
+
+                try
+                {
+                    string absPath = System.IO.Path.GetFullPath(path);
+                    string directory = System.IO.Path.GetDirectoryName(absPath);
+
+                    for (int i = 0; i < 4; i++)
+                    {
+                        if (string.IsNullOrEmpty(directory)) break;
+
+                        string jsonPath = System.IO.Path.Combine(directory, "package.json");
+                        if (System.IO.File.Exists(jsonPath))
+                        {
+                            string json = System.IO.File.ReadAllText(jsonPath);
+                            var localPkg = JsonUtility.FromJson<PackageInfo>(json);
+                            if (localPkg != null && !string.IsNullOrEmpty(localPkg.version)) return localPkg.version;
+                        }
+
+                        directory = System.IO.Directory.GetParent(directory)?.FullName;
+                    }
+                }
+                catch (System.Exception ex)
+                {
+                    Debug.LogWarning($"[Horizon] Manual version search error: {ex.Message}");
                 }
             }
-            catch (System.Exception ex)
-            {
-                Debug.LogWarning($"[Horizon] Failed to read version for '{packageName}': {ex.Message}");
-            }
+
             return "?.?.?";
         }
     }
