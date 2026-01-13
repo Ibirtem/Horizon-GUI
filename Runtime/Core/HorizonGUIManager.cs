@@ -1,7 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using BlackHorizon.HorizonWeatherTime;
 
 #if UDONSHARP
 using UdonSharp;
@@ -31,13 +30,6 @@ namespace BlackHorizon.HorizonGUI
         public TextMeshProUGUI instanceInfoText;
         public HorizonDataGrid playerGrid;
 
-        [Header("Weather Integration")]
-        public WeatherTimeSystem weatherSystem;
-        public TextMeshProUGUI weatherStatusText;
-        public TextMeshProUGUI weatherVersionText;
-        public Toggle realTimeToggle;
-        public Slider timeSlider;
-
         private int _currentTabIndex = 0;
 
         /// <summary>
@@ -56,8 +48,6 @@ namespace BlackHorizon.HorizonGUI
             UpdateSystemClock();
 
             if (Time.frameCount % 120 == 0) UpdatePlayerList();
-
-            if (_currentTabIndex == 1) SyncWeatherTime();
         }
 
         #region System Initialization
@@ -65,7 +55,6 @@ namespace BlackHorizon.HorizonGUI
         private void InitializeUI()
         {
             UpdatePlayerList();
-            SyncWeatherUI();
         }
 
         private void UpdateSystemClock()
@@ -98,7 +87,6 @@ namespace BlackHorizon.HorizonGUI
             }
 
             if (index == 0) UpdatePlayerList();
-            if (index == 1) SyncWeatherUI();
         }
 
         #endregion
@@ -147,55 +135,6 @@ namespace BlackHorizon.HorizonGUI
         public void OnPlayerSlotClicked()
         {
             Debug.Log($"[Horizon] Selected Player ID: {_lastEventInt}");
-        }
-
-        #endregion
-
-        #region Module: Weather
-
-        private void SyncWeatherUI()
-        {
-            if (weatherSystem == null) return;
-            if (weatherStatusText != null) weatherStatusText.text = "Status: <color=#33FF33>Connected</color>";
-            if (realTimeToggle != null) realTimeToggle.isOn = weatherSystem.useRealTime;
-
-            SyncWeatherTime();
-        }
-
-        private void SyncWeatherTime()
-        {
-            if (weatherSystem == null || timeSlider == null) return;
-
-            if (weatherSystem.useRealTime)
-            {
-                timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
-            }
-            timeSlider.interactable = !weatherSystem.useRealTime;
-        }
-
-        public void OnRealTimeChanged()
-        {
-            if (weatherSystem == null || realTimeToggle == null) return;
-
-            weatherSystem.useRealTime = realTimeToggle.isOn;
-            if (realTimeToggle.isOn) weatherSystem.ReleaseExternalControl();
-
-            SyncWeatherUI();
-        }
-
-        public void OnTimeSliderChanged()
-        {
-            if (weatherSystem == null || timeSlider == null || weatherSystem.useRealTime) return;
-            weatherSystem.SetExternalTime(timeSlider.value);
-        }
-
-        public void OnProfileClear() => SetWeather(0);
-        public void OnProfileSnow() => SetWeather(1);
-        public void OnProfileRain() => SetWeather(2);
-
-        private void SetWeather(int index)
-        {
-            if (weatherSystem != null) weatherSystem.SetWeatherProfile(index);
         }
 
         #endregion

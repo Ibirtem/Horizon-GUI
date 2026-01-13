@@ -704,5 +704,43 @@ namespace BlackHorizon.HorizonGUI.Editor
         }
 
         #endregion
+
+        /// <summary>
+        /// Dynamically locates a C# type by name and attaches it as an UdonSharp component.
+        /// <para>
+        /// <b>Search Strategy:</b><br/>
+        /// 1. Direct Type.GetType (for fully qualified names).<br/>
+        /// 2. Default Namespace ("BlackHorizon.HorizonGUI").<br/>
+        /// 3. Full AppDomain assembly scan (slow fallback for Editor safety).
+        /// </para>
+        /// </summary>
+        /// <param name="target">The GameObject to attach the script to.</param>
+        /// <param name="typeName">The class name (e.g., "HorizonGUI_WeatherModule").</param>
+        /// <returns>The attached behaviour, or a default HorizonGUIModule if not found.</returns>
+        public static UdonSharpBehaviour AttachLogicByString(GameObject target, string typeName)
+        {
+            System.Type type = System.Type.GetType(typeName);
+
+            if (type == null)
+                type = System.Type.GetType($"BlackHorizon.HorizonGUI.{typeName}, BlackHorizon.HorizonGUI.Runtime");
+
+            if (type == null)
+            {
+                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    type = asm.GetType(typeName);
+                    if (type == null) type = asm.GetType($"BlackHorizon.HorizonGUI.{typeName}");
+                    if (type != null) break;
+                }
+            }
+
+            if (type == null)
+            {
+                Debug.LogError($"<color=red>[HorizonFactory]</color> Could not find script type: '{typeName}'. Check spelling or namespace.");
+                return AttachLogic<HorizonGUIModule>(target);
+            }
+
+            return UdonSharpUndo.AddComponent(target, type) as UdonSharpBehaviour;
+        }
     }
 }

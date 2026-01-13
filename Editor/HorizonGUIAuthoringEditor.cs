@@ -233,29 +233,32 @@ namespace BlackHorizon.HorizonGUI
             if (foundModules.Length > 0)
                 binder.BindArray("modules", new System.Collections.Generic.List<HorizonGUIModule>(foundModules));
 
-            var wSys = Object.FindObjectOfType<BlackHorizon.HorizonWeatherTime.WeatherTimeSystem>();
-            if (wSys != null)
+            binder.Apply();
+
+            var wModule = contentRoot.GetComponentInChildren<HorizonGUI_WeatherModule>(true);
+            if (wModule != null)
             {
-                binder.Bind("weatherSystem", wSys);
-                binder.Apply();
-
-                if (manager.weatherVersionText != null)
+                var wSys = Object.FindObjectOfType<BlackHorizon.HorizonWeatherTime.WeatherTimeSystem>();
+                if (wSys != null)
                 {
-                    string ver = GetPackageVersion("com.blackhorizon.horizonweathertime");
+                    var wBinder = new HorizonGUIFactory.HorizonLogicBinder(wModule);
+                    wBinder.Bind("weatherSystem", wSys);
+                    wBinder.Apply();
 
-                    SerializedObject textSO = new SerializedObject(manager.weatherVersionText);
-                    SerializedProperty textProp = textSO.FindProperty("m_text");
-                    if (textProp != null)
+                    if (wModule.weatherVersionText != null)
                     {
-                        textProp.stringValue = $"v{ver}";
-                        textSO.ApplyModifiedProperties();
+                        string ver = GetPackageVersion("com.blackhorizon.horizonweathertime");
+
+                        SerializedObject textSO = new SerializedObject(wModule.weatherVersionText);
+                        SerializedProperty textProp = textSO.FindProperty("m_text");
+                        if (textProp != null)
+                        {
+                            textProp.stringValue = $"v{ver}";
+                            textSO.ApplyModifiedProperties();
+                        }
                     }
                 }
-
-                return;
             }
-
-            binder.Apply();
         }
 
         /// <summary>

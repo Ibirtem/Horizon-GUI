@@ -16,8 +16,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
     /// </summary>
     public static class HorizonCompiler
     {
-        private static UdonSharpBehaviour _targetLogic;
-
         /// <summary>
         /// Clears the existing UI and rebuilds the interface from the provided node tree.
         /// </summary>
@@ -25,27 +23,29 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <param name="rootNode">The parsed HTML-like node tree.</param>
         /// <param name="styleSheet">The parsed CSS stylesheet.</param>
         /// <param name="logicTarget">The UdonSharpBehaviour that receives events and bindings.</param>
-        public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour logicTarget)
+        public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic)
         {
-            _targetLogic = logicTarget;
-
             while (rootContainer.transform.childCount > 0)
                 GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
 
             foreach (var child in rootNode.Children)
             {
-                BuildNode(child, rootContainer, styleSheet);
+                BuildNode(child, rootContainer, styleSheet, rootLogic);
             }
         }
 
         /// <summary>
-        /// Processes a single node, creates the corresponding UI element, and recurses through children.
+        /// Recursive entry point for building the UI tree.
+        /// Propagates the <paramref name="contextLogic"/> down the hierarchy to bind events (`u-click`) and variables (`u-bind`).
         /// </summary>
-        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet)
+        /// <param name="contextLogic">The current active UdonSharpBehaviour (Manager or Module) acting as the controller.</param>
+        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, UdonSharpBehaviour contextLogic)
         {
             GameObject createdObj = null;
             var styles = styleSheet.GetComputedStyle(node);
             string tag = node.Tag.ToLower();
+
+            UdonSharpBehaviour nextContext = contextLogic;
 
             switch (tag)
             {
@@ -54,7 +54,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     break;
 
                 case "h-grid":
-                    createdObj = BuildDataGrid(node, parent, styles);
+                    createdObj = BuildDataGrid(node, parent, styles, contextLogic);
                     break;
 
                 case "button":
@@ -88,7 +88,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 case "module":
                 case "view":
-                    createdObj = BuildModule(node, parent, styles);
+                    createdObj = BuildModule(node, parent, styles, ref nextContext);
                     break;
 
                 case "hr":
@@ -104,13 +104,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (createdObj != null)
             {
-                ProcessLogic(createdObj, node);
+                ProcessLogic(createdObj, node, nextContext);
 
                 if (tag != "h-grid")
                 {
                     foreach (var child in node.Children)
                     {
-                        BuildNode(child, createdObj, styleSheet);
+                        BuildNode(child, createdObj, styleSheet, nextContext);
                     }
                 }
 
@@ -172,19 +172,39 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         }
 
         /// <summary>
-        /// Constructs a Module container with HorizonGUIModule component attached.
+        /// Constructs a Module container and evaluates the <c>u-script</c> attribute.
+        /// <para>
+        /// If <c>u-script</c> is present, this method attaches the specified script and 
+        /// <b>switches the <paramref name="logicContext"/></b> for all subsequent children of this node.
+        /// </para>
         /// </summary>
-        private static GameObject BuildModule(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        /// <param name="logicContext">
+        /// Reference to the current logic controller. Modified only if a new script is attached.
+        /// </param>
+        private static GameObject BuildModule(HorizonNode node, GameObject parent, Dictionary<string, string> styles, ref UdonSharpBehaviour logicContext)
         {
             GameObject go = BuildContainer(GetNodeName(node), parent, styles, node);
-            HorizonGUIFactory.AttachLogic<HorizonGUIModule>(go);
+
+            if (node.Attributes.TryGetValue("u-script", out string scriptName))
+            {
+                var newScript = HorizonGUIFactory.AttachLogicByString(go, scriptName);
+                if (newScript != null)
+                {
+                    logicContext = newScript;
+                }
+            }
+            else
+            {
+                HorizonGUIFactory.AttachLogic<HorizonGUIModule>(go);
+            }
+
             return go;
         }
 
         /// <summary>
         /// Constructs a complex DataGrid with pooled items.
         /// </summary>
-        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles, UdonSharpBehaviour targetLogic)
         {
             int pool = ParseInt(node.Attributes, "pool", 64);
             float w = ParseFloat(node.Attributes, "cell-w", 100);
@@ -206,7 +226,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             if (node.Attributes.TryGetValue("u-click", out string clickMethod))
             {
                 eventName = clickMethod;
-                target = _targetLogic;
+                target = targetLogic;
             }
 
             var manager = HorizonGUIFactory.CreateDataGrid(
@@ -460,18 +480,18 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <summary>
         /// Links Unity UI events to UdonSharp events and binds properties to script variables.
         /// </summary>
-        private static void ProcessLogic(GameObject obj, HorizonNode node)
+        private static void ProcessLogic(GameObject obj, HorizonNode node, UdonSharpBehaviour logicTarget)
         {
+            if (logicTarget == null) return;
+
             if (node.Tag.ToLower() != "h-grid" && node.Attributes.TryGetValue("u-click", out string methodName))
             {
-                if (_targetLogic == null) return;
-
                 Button btn = obj.GetComponent<Button>();
                 Toggle tog = obj.GetComponent<Toggle>();
                 Slider sld = obj.GetComponent<Slider>();
 
-                UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(_targetLogic);
-                if (backing == null) backing = _targetLogic.GetComponent<UdonBehaviour>();
+                UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(logicTarget);
+                if (backing == null) backing = logicTarget.GetComponent<UdonBehaviour>();
 
                 if (backing != null)
                 {
@@ -498,19 +518,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (node.Attributes.TryGetValue("u-bind", out string varName))
             {
-                if (_targetLogic != null)
-                {
-                    Component comp = obj.GetComponent<TMP_InputField>();
-                    if (comp == null) comp = obj.GetComponent<Slider>();
-                    if (comp == null) comp = obj.GetComponent<Toggle>();
-                    if (comp == null) comp = obj.GetComponent<HorizonDataGrid>();
-                    if (comp == null) comp = obj.GetComponent<TextMeshProUGUI>();
-                    if (comp == null) comp = obj.GetComponent<Transform>();
+                Component comp = obj.GetComponent<TMP_InputField>();
+                if (comp == null) comp = obj.GetComponent<Slider>();
+                if (comp == null) comp = obj.GetComponent<Toggle>();
+                if (comp == null) comp = obj.GetComponent<HorizonDataGrid>();
+                if (comp == null) comp = obj.GetComponent<TextMeshProUGUI>();
+                if (comp == null) comp = obj.GetComponent<Transform>();
 
-                    var binder = new HorizonGUIFactory.HorizonLogicBinder(_targetLogic);
-                    binder.Bind(varName, comp);
-                    binder.Apply();
-                }
+                var binder = new HorizonGUIFactory.HorizonLogicBinder(logicTarget);
+                binder.Bind(varName, comp);
+                binder.Apply();
             }
         }
 

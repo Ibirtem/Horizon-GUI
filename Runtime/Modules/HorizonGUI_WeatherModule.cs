@@ -15,18 +15,15 @@ namespace BlackHorizon.HorizonGUI
     public class HorizonGUI_WeatherModule : HorizonGUIModule
     {
         [Header("Integration")]
-        public WeatherTimeSystem targetSystem;
+        public WeatherTimeSystem weatherSystem;
 
         [Header("UI References")]
-        public GameObject controlsContainer;
-        public TextMeshProUGUI statusText;
-        public TextMeshProUGUI versionText;
+        public TextMeshProUGUI weatherStatusText;
+        public TextMeshProUGUI weatherVersionText;
 
         [Header("Controls")]
         public Toggle realTimeToggle;
         public Slider timeSlider;
-
-        private bool _isDragging = false;
 
         private void OnEnable()
         {
@@ -36,40 +33,39 @@ namespace BlackHorizon.HorizonGUI
 
         private void Update()
         {
-            if (targetSystem != null && timeSlider != null)
+            if (weatherSystem != null && timeSlider != null)
             {
-                if (targetSystem.useRealTime)
+                if (weatherSystem.useRealTime)
                 {
-                    timeSlider.SetValueWithoutNotify(targetSystem._sunTimeOfDay);
+                    timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
                 }
             }
         }
 
         public void UpdateStatusVisuals()
         {
-            if (targetSystem != null)
+            if (weatherStatusText != null)
             {
-                statusText.text = "System Status: <color=#33FF33>Connected</color>";
-            }
-            else
-            {
-                statusText.text = "System Status: <color=#FF3333>Not Found</color>";
+                if (weatherSystem != null)
+                    weatherStatusText.text = "Status: <color=#33FF33>Connected</color>";
+                else
+                    weatherStatusText.text = "Status: <color=#FF3333>Not Found</color>";
             }
         }
 
         private void SyncUI()
         {
-            if (targetSystem == null) return;
+            if (weatherSystem == null) return;
 
             if (realTimeToggle != null)
             {
-                realTimeToggle.isOn = targetSystem.useRealTime;
+                realTimeToggle.isOn = weatherSystem.useRealTime;
             }
 
             if (timeSlider != null)
             {
-                timeSlider.SetValueWithoutNotify(targetSystem._sunTimeOfDay);
-                timeSlider.interactable = !targetSystem.useRealTime;
+                timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
+                timeSlider.interactable = !weatherSystem.useRealTime;
             }
         }
 
@@ -77,26 +73,36 @@ namespace BlackHorizon.HorizonGUI
 
         public void OnRealTimeChanged()
         {
-            if (targetSystem == null || realTimeToggle == null) return;
+            if (weatherSystem == null || realTimeToggle == null) return;
 
-            // Debug.Log($"[WeatherGUI] Real Time: {realTimeToggle.isOn}");
-            targetSystem.useRealTime = realTimeToggle.isOn;
+            weatherSystem.useRealTime = realTimeToggle.isOn;
 
             if (timeSlider != null)
             {
                 timeSlider.interactable = !realTimeToggle.isOn;
             }
 
-            if (realTimeToggle.isOn) targetSystem.ReleaseExternalControl();
+            if (realTimeToggle.isOn) weatherSystem.ReleaseExternalControl();
+
+            UpdateStatusVisuals();
         }
 
         public void OnTimeSliderChanged()
         {
-            if (targetSystem == null || timeSlider == null) return;
+            if (weatherSystem == null || timeSlider == null) return;
 
-            if (targetSystem.useRealTime) return;
+            if (weatherSystem.useRealTime) return;
 
-            targetSystem.SetExternalTime(timeSlider.value);
+            weatherSystem.SetExternalTime(timeSlider.value);
+        }
+
+        public void OnProfileClear() => SetWeather(0);
+        public void OnProfileSnow() => SetWeather(1);
+        public void OnProfileRain() => SetWeather(2);
+
+        private void SetWeather(int index)
+        {
+            if (weatherSystem != null) weatherSystem.SetWeatherProfile(index);
         }
     }
 }
