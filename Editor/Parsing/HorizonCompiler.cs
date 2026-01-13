@@ -11,44 +11,54 @@ using VRC.Udon;
 namespace BlackHorizon.HorizonGUI.Editor.Parsing
 {
     /// <summary>
-    /// Core engine that translates HorizonNode tree into Unity UI GameObjects.
-    /// Handles CSS application and Udon logic binding.
+    /// The core translation engine that converts a HorizonNode tree into Unity UI GameObjects.
+    /// Manages CSS application, Udon logic binding, and hierarchical layout construction.
     /// </summary>
     public static class HorizonCompiler
     {
         private static UdonSharpBehaviour _targetLogic;
 
+        /// <summary>
+        /// Clears the existing UI and rebuilds the interface from the provided node tree.
+        /// </summary>
+        /// <param name="rootContainer">The parent GameObject for the generated UI.</param>
+        /// <param name="rootNode">The parsed HTML-like node tree.</param>
+        /// <param name="styleSheet">The parsed CSS stylesheet.</param>
+        /// <param name="logicTarget">The UdonSharpBehaviour that receives events and bindings.</param>
         public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour logicTarget)
         {
             _targetLogic = logicTarget;
 
-            // Clear old
             while (rootContainer.transform.childCount > 0)
                 GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
 
-            // Build new
             foreach (var child in rootNode.Children)
             {
                 BuildNode(child, rootContainer, styleSheet);
             }
         }
 
+        /// <summary>
+        /// Processes a single node, creates the corresponding UI element, and recurses through children.
+        /// </summary>
         private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet)
         {
             GameObject createdObj = null;
             var styles = styleSheet.GetComputedStyle(node);
             string tag = node.Tag.ToLower();
-            string objName = GetNodeName(node);
 
-            // --- 1. ELEMENT CREATION STRATEGY ---
             switch (tag)
             {
                 case "scroll":
-                    createdObj = BuildScroll(objName, parent, styles);
+                    createdObj = BuildScroll(node, parent, styles);
+                    break;
+
+                case "h-grid":
+                    createdObj = BuildDataGrid(node, parent, styles);
                     break;
 
                 case "button":
-                    createdObj = BuildButton(objName, parent, styles);
+                    createdObj = BuildButton(node, parent, styles);
                     break;
 
                 case "text":
@@ -60,7 +70,11 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     break;
 
                 case "input":
-                    createdObj = BuildInput(node, parent, styles);
+                    string type = node.Attributes.ContainsKey("type") ? node.Attributes["type"].ToLower() : "text";
+                    if (type == "range")
+                        createdObj = BuildRangeInput(node, parent, styles);
+                    else
+                        createdObj = BuildTextInput(node, parent, styles);
                     break;
 
                 case "toggle":
@@ -72,26 +86,34 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     createdObj = BuildIcon(node, parent, styles);
                     break;
 
-                case "div":
+                case "module":
                 case "view":
+                    createdObj = BuildModule(node, parent, styles);
+                    break;
+
+                case "hr":
+                    createdObj = BuildSeparator(node, parent, styles);
+                    break;
+
+                case "div":
                 case "section":
                 default:
-                    createdObj = BuildContainer(objName, parent, styles);
+                    createdObj = BuildContainer(GetNodeName(node), parent, styles, node);
                     break;
             }
 
-            // --- 2. GENERIC PROCESSING ---
             if (createdObj != null)
             {
                 ProcessLogic(createdObj, node);
 
-                // --- 3. RECURSION ---
-                foreach (var child in node.Children)
+                if (tag != "h-grid")
                 {
-                    BuildNode(child, createdObj, styleSheet);
+                    foreach (var child in node.Children)
+                    {
+                        BuildNode(child, createdObj, styleSheet);
+                    }
                 }
 
-                // Reset Z for safety
                 if (createdObj.transform is RectTransform rt)
                 {
                     Vector3 pos = rt.anchoredPosition3D;
@@ -102,64 +124,154 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
         }
 
-        // --- BUILDERS ---
-
-        private static GameObject BuildScroll(string name, GameObject parent, Dictionary<string, string> styles)
+        /// <summary>
+        /// Constructs a vertical scrollable area.
+        /// </summary>
+        private static GameObject BuildScroll(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            GameObject content = HorizonGUIFactory.CreateScrollableColumn(name, parent);
-
-            // Navigate up to Root: Content -> Viewport -> ScrollView(Root)
+            GameObject content = HorizonGUIFactory.CreateScrollableColumn(GetNodeName(node), parent);
             if (content.transform.parent != null && content.transform.parent.parent != null)
             {
                 GameObject root = content.transform.parent.parent.gameObject;
                 ApplyLayoutStyles(root, styles);
-                ApplyContainerStyles(content, styles);
+                ApplyContainerStyles(content, styles, node);
             }
-
             return content;
         }
 
-        private static GameObject BuildButton(string name, GameObject parent, Dictionary<string, string> styles)
+        /// <summary>
+        /// Constructs a thin horizontal line (separator).
+        /// </summary>
+        private static GameObject BuildSeparator(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            // 1. Root & State Layer (Background)
-            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-            Color baseColor = new Color(1, 1, 1, 0.05f);
+            GameObject go = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.2f), null);
+            float h = styles.ContainsKey("height") ? ParseFloat(styles, "height", 2) : 2;
+            ApplyLayoutStyles(go, styles);
+            ApplyContainerStyles(go, styles, node);
+            HorizonGUIFactory.SetLayoutSize(go, minH: h, prefH: h, flexH: 0);
+            return go;
+        }
 
-            GameObject btnRoot = HorizonGUIFactory.CreatePanel(name, parent, baseColor, bgSprite);
+        /// <summary>
+        /// Constructs a Module container with HorizonGUIModule component attached.
+        /// </summary>
+        private static GameObject BuildModule(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        {
+            GameObject go = BuildContainer(GetNodeName(node), parent, styles, node);
+            HorizonGUIFactory.AttachLogic<HorizonGUIModule>(go);
+            return go;
+        }
+
+        /// <summary>
+        /// Constructs a complex DataGrid with pooled items.
+        /// </summary>
+        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        {
+            int pool = ParseInt(node.Attributes, "pool", 64);
+            float w = ParseFloat(node.Attributes, "cell-w", 100);
+            float h = ParseFloat(node.Attributes, "cell-h", 100);
+            float spacing = ParseFloat(node.Attributes, "spacing", 10);
+
+            bool isCircle = false;
+            if (node.Attributes.TryGetValue("style", out string styleVal))
+                if (styleVal.ToLower() == "circle") isCircle = true;
+
+            string eventName = "OnItemSelected";
+            UdonSharpBehaviour target = null;
+
+            if (node.Attributes.TryGetValue("u-click", out string clickMethod))
+            {
+                eventName = clickMethod;
+                target = _targetLogic;
+            }
+
+            var manager = HorizonGUIFactory.CreateDataGrid(
+                GetNodeName(node),
+                parent,
+                pool,
+                new Vector2(w, h),
+                target,
+                eventName,
+                isCircle
+            );
+
+            GameObject go = manager.gameObject;
+            if (go.GetComponent<GridLayoutGroup>() is GridLayoutGroup glg)
+            {
+                glg.spacing = new Vector2(spacing, spacing);
+            }
+
+            ApplyLayoutStyles(go, styles);
+            ApplyContainerStyles(go, styles, node);
+
+            return go;
+        }
+
+        /// <summary>
+        /// Constructs a range input (Slider) with VRC interaction setup.
+        /// </summary>
+        private static GameObject BuildRangeInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        {
+            float min = ParseFloat(node.Attributes, "min", 0f);
+            float max = ParseFloat(node.Attributes, "max", 1f);
+            float val = ParseFloat(node.Attributes, "value", 0f);
+
+            Slider s = HorizonGUIFactory.CreateSlider(parent, min, max, val);
+            GameObject go = s.gameObject;
+            go.name = GetNodeName(node);
+
+            if (go.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) go.AddComponent<VRC.SDK3.Components.VRCUiShape>();
+            BoxCollider col = go.GetComponent<BoxCollider>();
+            if (col == null) col = go.AddComponent<BoxCollider>();
+            col.isTrigger = true;
+
+            ApplyLayoutStyles(go, styles);
+            ApplyContainerStyles(go, styles, node);
+
+            return go;
+        }
+
+        /// <summary>
+        /// Constructs an interactive button with state and interaction layers.
+        /// </summary>
+        private static GameObject BuildButton(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        {
+            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+            GameObject btnRoot = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.05f), bgSprite);
+
             Image stateImg = btnRoot.GetComponent<Image>();
             stateImg.raycastTarget = true;
+            stateImg.type = Image.Type.Sliced;
+            stateImg.pixelsPerUnitMultiplier = 1.0f;
 
-            // 2. Interaction Layer (Hover/Press Overlay)
             GameObject hoverObj = HorizonGUIFactory.CreatePanel("Interaction_Overlay", btnRoot, Color.white, bgSprite);
             HorizonGUIFactory.Stretch(hoverObj);
             Image hoverImg = hoverObj.GetComponent<Image>();
-            hoverImg.raycastTarget = false;
             hoverImg.type = Image.Type.Sliced;
+            hoverImg.pixelsPerUnitMultiplier = 1.0f;
 
             LayoutElement le = hoverObj.AddComponent<LayoutElement>();
             le.ignoreLayout = true;
 
-            // 3. Button Component
             Button btn = btnRoot.AddComponent<Button>();
             btn.targetGraphic = hoverImg;
             btn.transition = Selectable.Transition.ColorTint;
 
             ColorBlock cb = btn.colors;
-            cb.normalColor = new Color(1, 1, 1, 0f); // Invisible overlay by default
+            cb.normalColor = new Color(1, 1, 1, 0f);
             cb.highlightedColor = new Color(1, 1, 1, 0.1f);
             cb.pressedColor = new Color(1, 1, 1, 0.2f);
             cb.selectedColor = new Color(1, 1, 1, 0.0f);
             cb.fadeDuration = 0.1f;
             btn.colors = cb;
 
-            // 4. Layout for Children
             if (!styles.ContainsKey("align-items")) styles["align-items"] = "center";
+            if (!styles.ContainsKey("justify-content")) styles["justify-content"] = "center";
             if (!styles.ContainsKey("padding")) styles["padding"] = "10px";
 
-            ApplyContainerStyles(btnRoot, styles);
+            ApplyContainerStyles(btnRoot, styles, node);
             ApplyLayoutStyles(btnRoot, styles);
 
-            // Ensure VRC Interaction
             if (btnRoot.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null)
                 btnRoot.AddComponent<VRC.SDK3.Components.VRCUiShape>();
 
@@ -173,14 +285,20 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return btnRoot;
         }
 
-        private static GameObject BuildContainer(string name, GameObject parent, Dictionary<string, string> styles)
+        /// <summary>
+        /// Constructs a generic layout block (div).
+        /// </summary>
+        private static GameObject BuildContainer(string name, GameObject parent, Dictionary<string, string> styles, HorizonNode node)
         {
             GameObject go = HorizonGUIFactory.CreateBlock(name, parent);
-            ApplyContainerStyles(go, styles);
+            ApplyContainerStyles(go, styles, node);
             ApplyLayoutStyles(go, styles);
             return go;
         }
 
+        /// <summary>
+        /// Constructs a text label with specific predefined styles (H1, H2, Label, Body).
+        /// </summary>
         private static GameObject BuildText(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             HorizonGUIFactory.TextStyle defStyle = HorizonGUIFactory.TextStyle.Body;
@@ -191,7 +309,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             else if (tag == "label") defStyle = HorizonGUIFactory.TextStyle.SmallDim;
 
             var tmp = HorizonGUIFactory.CreateText(parent, node.TextContent, defStyle);
-
             tmp.gameObject.name = GetNodeName(node);
 
             ApplyTextStyles(tmp, styles);
@@ -200,12 +317,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return tmp.gameObject;
         }
 
-        private static GameObject BuildInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        /// <summary>
+        /// Constructs a styled text input field.
+        /// </summary>
+        private static GameObject BuildTextInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             Sprite bg = HorizonGUIFactory.GetOrGenerateRoundedSprite();
             GameObject root = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.1f), bg);
             Image img = root.GetComponent<Image>();
-            img.raycastTarget = true;
+            img.type = Image.Type.Sliced;
+            img.pixelsPerUnitMultiplier = 3.0f;
 
             GameObject textArea = HorizonGUIFactory.CreateBlock("Text Area", root);
             RectTransform taRect = textArea.GetComponent<RectTransform>();
@@ -228,18 +349,20 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             inp.placeholder = p;
             inp.targetGraphic = img;
 
-            // Interaction
             if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
             BoxCollider col = root.AddComponent<BoxCollider>();
             col.isTrigger = true;
 
             HorizonGUIFactory.SetLayoutSize(root, minH: 40, prefH: 40);
-            ApplyContainerStyles(root, styles);
+            ApplyContainerStyles(root, styles, node);
             ApplyLayoutStyles(root, styles);
 
             return root;
         }
 
+        /// <summary>
+        /// Constructs a styled toggle switch.
+        /// </summary>
         private static GameObject BuildToggle(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             GameObject root = HorizonGUIFactory.CreateRow(GetNodeName(node), parent, spacing: 10, align: TextAnchor.MiddleLeft);
@@ -248,7 +371,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             HorizonGUIFactory.SetLayoutSize(bgObj, 32, 32, 32, 32);
 
             GameObject checkObj = HorizonGUIFactory.CreatePanel("Checkmark", bgObj, Color.white, HorizonGUIFactory.LoadPackageSprite("checkmark.png"));
-            // Center checkmark
             RectTransform checkRect = checkObj.GetComponent<RectTransform>();
             checkRect.anchorMin = new Vector2(0.2f, 0.2f); checkRect.anchorMax = new Vector2(0.8f, 0.8f);
             checkRect.offsetMin = Vector2.zero; checkRect.offsetMax = Vector2.zero;
@@ -267,12 +389,15 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             BoxCollider col = root.AddComponent<BoxCollider>();
             col.isTrigger = true;
 
-            ApplyContainerStyles(root, styles);
+            ApplyContainerStyles(root, styles, node);
             ApplyLayoutStyles(root, styles);
 
             return root;
         }
 
+        /// <summary>
+        /// Constructs an icon or image element.
+        /// </summary>
         private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             GameObject go = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
@@ -291,12 +416,12 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return go;
         }
 
-        // --- HELPERS ---
-
+        /// <summary>
+        /// Links Unity UI events to UdonSharp events and binds properties to script variables.
+        /// </summary>
         private static void ProcessLogic(GameObject obj, HorizonNode node)
         {
-            // u-click
-            if (node.Attributes.TryGetValue("u-click", out string methodName))
+            if (node.Tag.ToLower() != "h-grid" && node.Attributes.TryGetValue("u-click", out string methodName))
             {
                 if (_targetLogic == null) return;
 
@@ -323,7 +448,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 }
             }
 
-            // u-bind
             if (node.Attributes.TryGetValue("u-bind", out string varName))
             {
                 if (_targetLogic != null)
@@ -331,6 +455,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     Component comp = obj.GetComponent<TMP_InputField>();
                     if (comp == null) comp = obj.GetComponent<Slider>();
                     if (comp == null) comp = obj.GetComponent<Toggle>();
+                    if (comp == null) comp = obj.GetComponent<HorizonDataGrid>();
                     if (comp == null) comp = obj.GetComponent<TextMeshProUGUI>();
                     if (comp == null) comp = obj.GetComponent<Transform>();
 
@@ -341,6 +466,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
         }
 
+        /// <summary>
+        /// Generates a readable name for a GameObject based on node ID or class.
+        /// </summary>
         private static string GetNodeName(HorizonNode node)
         {
             if (node.Attributes.ContainsKey("id")) return node.Attributes["id"];
@@ -348,9 +476,12 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return node.Tag;
         }
 
-        private static void ApplyContainerStyles(GameObject go, Dictionary<string, string> styles)
+        /// <summary>
+        /// Applies container-specific styles like backgrounds and layout groups.
+        /// Determines the pixelsPerUnitMultiplier based on the node context (e.g., sidebar vs rows).
+        /// </summary>
+        private static void ApplyContainerStyles(GameObject go, Dictionary<string, string> styles, HorizonNode node)
         {
-            // Background
             if (styles.TryGetValue("background-color", out string hex))
             {
                 Image img = go.GetComponent<Image>();
@@ -358,11 +489,23 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 if (ColorUtility.TryParseHtmlString(hex, out Color col))
                 {
                     img.color = col;
-                    if (img.sprite == null) { img.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite(); img.type = Image.Type.Sliced; }
+                    if (img.sprite == null)
+                    {
+                        img.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+                        img.type = Image.Type.Sliced;
+
+                        bool isFullRound = false;
+                        if (node != null && node.Attributes.TryGetValue("class", out string cls))
+                        {
+                            string lowCls = cls.ToLower();
+                            if (lowCls.Contains("sidebar") || lowCls.Contains("nav-btn") || lowCls.Contains("profile-btn"))
+                                isFullRound = true;
+                        }
+                        img.pixelsPerUnitMultiplier = isFullRound ? 1.0f : 3.0f;
+                    }
                 }
             }
 
-            // Layout Group
             bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
             float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
             int padding = (int)ParseFloat(styles, "padding", 0);
@@ -372,53 +515,86 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             {
                 if (alignVal == "center") align = TextAnchor.MiddleCenter;
                 if (alignVal == "flex-end") align = TextAnchor.LowerRight;
+                if (alignVal == "stretch") align = TextAnchor.UpperLeft;
             }
 
             LayoutGroup lg = go.GetComponent<LayoutGroup>();
             if (lg == null)
             {
-                if (isRow) lg = go.AddComponent<HorizontalLayoutGroup>();
-                else lg = go.AddComponent<VerticalLayoutGroup>();
+                if (go.GetComponent<Slider>() == null && go.GetComponent<TMP_InputField>() == null)
+                {
+                    if (isRow) lg = go.AddComponent<HorizontalLayoutGroup>();
+                    else lg = go.AddComponent<VerticalLayoutGroup>();
+                }
             }
 
-            lg.padding = new RectOffset(padding, padding, padding, padding);
+            if (lg != null)
+            {
+                lg.padding = new RectOffset(padding, padding, padding, padding);
 
-            if (lg is HorizontalLayoutGroup hlg)
-            {
-                hlg.spacing = spacing;
-                hlg.childAlignment = align;
-                hlg.childControlWidth = true;
-                hlg.childControlHeight = true;
-                hlg.childForceExpandWidth = false;
-                hlg.childForceExpandHeight = false;
+                if (lg is HorizontalLayoutGroup hlg)
+                {
+                    hlg.spacing = spacing;
+                    hlg.childAlignment = align;
+                    hlg.childControlWidth = true;
+                    hlg.childControlHeight = true;
+                    hlg.childForceExpandWidth = false;
+                    hlg.childForceExpandHeight = false;
+                }
+                if (lg is VerticalLayoutGroup vlg)
+                {
+                    vlg.spacing = spacing;
+                    vlg.childAlignment = align;
+                    vlg.childControlWidth = true;
+                    vlg.childControlHeight = true;
+                    vlg.childForceExpandHeight = false;
+                    vlg.childForceExpandWidth = false;
+                }
             }
-            if (lg is VerticalLayoutGroup vlg)
+
+            if (go.GetComponent<GridLayoutGroup>() is GridLayoutGroup glg)
             {
-                vlg.spacing = spacing;
-                vlg.childAlignment = align;
-                vlg.childControlWidth = true;
-                vlg.childControlHeight = true;
-                vlg.childForceExpandHeight = false;
-                vlg.childForceExpandWidth = true;
+                glg.padding = new RectOffset(padding, padding, padding, padding);
+                glg.spacing = new Vector2(spacing, spacing);
             }
         }
 
+        /// <summary>
+        /// Applies LayoutElement properties (width, height, flex-grow) to the GameObject.
+        /// </summary>
         private static void ApplyLayoutStyles(GameObject go, Dictionary<string, string> styles)
         {
             float w = ParseFloat(styles, "width", -1);
             float h = ParseFloat(styles, "height", -1);
             float flex = ParseFloat(styles, "flex-grow", -1);
 
+            float flexW = -1;
+            float flexH = -1;
+
+            if (flex >= 0)
+            {
+                flexW = flex;
+                flexH = flex;
+            }
+            else
+            {
+                if (w > 0) flexW = 0;
+                if (h > 0) flexH = 0;
+            }
+
             HorizonGUIFactory.SetLayoutSize(go,
                 minW: w > 0 ? w : (float?)null,
                 minH: h > 0 ? h : (float?)null,
                 prefW: w > 0 ? w : (float?)null,
                 prefH: h > 0 ? h : (float?)null,
-                flexH: flex >= 0 ? flex : -1,
-                flexW: flex >= 0 ? flex : -1
+                flexH: flexH,
+                flexW: flexW
             );
         }
 
+        /// <summary>
+        /// Applies typography styles to a TextMeshProUGUI component.
+        /// </summary>
         private static void ApplyTextStyles(TextMeshProUGUI tmp, Dictionary<string, string> styles)
         {
             if (styles.TryGetValue("color", out string hex)) { if (ColorUtility.TryParseHtmlString(hex, out Color col)) tmp.color = col; }
@@ -431,12 +607,21 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
         }
 
-        private static float ParseFloat(Dictionary<string, string> styles, string key, float def)
+        private static float ParseFloat(Dictionary<string, string> attrs, string key, float def)
         {
-            if (styles.TryGetValue(key, out string val))
+            if (attrs.TryGetValue(key, out string val))
             {
                 val = val.Replace("px", "").Trim();
                 if (float.TryParse(val, out float result)) return result;
+            }
+            return def;
+        }
+
+        private static int ParseInt(Dictionary<string, string> attrs, string key, int def)
+        {
+            if (attrs.TryGetValue(key, out string val))
+            {
+                if (int.TryParse(val, out int result)) return result;
             }
             return def;
         }

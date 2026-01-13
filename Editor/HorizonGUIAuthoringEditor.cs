@@ -6,14 +6,28 @@ using BlackHorizon.HorizonGUI.Editor.Parsing;
 
 namespace BlackHorizon.HorizonGUI
 {
+    /// <summary>
+    /// Custom Inspector for HorizonGUIAuthoring that provides the main entry point for compiling HTML/CSS into Unity UI.
+    /// Handles Canvas generation, visual layering, layout rebuilding, and Udon logic binding.
+    /// </summary>
     [CustomEditor(typeof(HorizonGUIAuthoring))]
     public class HorizonGUIAuthoringEditor : UnityEditor.Editor
     {
+        private const string GENERATED_CANVAS_NAME = "GeneratedUI_Canvas";
+        private const float DEFAULT_CANVAS_WIDTH = 1000f;
+        private const float DEFAULT_CANVAS_HEIGHT = 600f;
+
+        [System.Serializable]
+        private class PackageInfo { public string version; }
+
         public override void OnInspectorGUI()
         {
-            GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel);
-            headerStyle.fontSize = 13;
-            headerStyle.alignment = TextAnchor.MiddleCenter;
+            GUIStyle headerStyle = new GUIStyle(EditorStyles.boldLabel)
+            {
+                fontSize = 13,
+                alignment = TextAnchor.MiddleCenter
+            };
+
             GUILayout.Space(10);
             GUILayout.Label("HORIZON UI COMPILER", headerStyle);
             GUILayout.Space(5);
@@ -39,22 +53,75 @@ namespace BlackHorizon.HorizonGUI
         }
 
         /// <summary>
-        /// Orchestrates the entire build process: Parsing, Canvas setup, Compilation, and Baking.
+        /// Orchestrates the construction of the UI system.
+        /// Processes markup, applies styles, sets up the physical Canvas, and links Udon logic.
         /// </summary>
         private void BuildInterface(HorizonGUIAuthoring authoring)
         {
-            var rootNode = HorizonMarkupParser.Parse(authoring.htmlFile.text);
+            if (!ValidateBackingLogic(authoring))
+            {
+                EditorUtility.DisplayDialog("Horizon GUI", "No Backing Logic found! Add HorizonGUIManager to this object before compiling.", "OK");
+                return;
+            }
 
+            ValidateBackingLogic(authoring);
+
+            HorizonGUIFactory.EnsureEventSystemInside(authoring.gameObject);
+
+            HorizonNode rootNode = HorizonMarkupParser.Parse(authoring.htmlFile.text);
             HorizonStyleSheet styleSheet = new HorizonStyleSheet();
             if (authoring.cssFile != null)
                 styleSheet = HorizonCSSParser.Parse(authoring.cssFile.text);
 
-            string rootName = "GeneratedUI_Canvas";
-            Transform container = authoring.transform.Find(rootName);
+            GameObject canvasObj = PrepareCanvasRoot(authoring);
+            RectTransform rootRect = canvasObj.GetComponent<RectTransform>();
 
+            ClearExistingGeneratedUI(canvasObj);
+
+            SetupVisualLayers(canvasObj, out GameObject contentRoot);
+
+            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.backingLogic);
+
+            FinalizeLayoutAndPhysics(canvasObj, rootRect);
+
+            PerformLogicBinding(authoring, contentRoot);
+
+            HorizonGUIBaker.BakeInterface(canvasObj.name);
+
+            Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoring.name}' completed successfully.");
+        }
+
+        /// <summary>
+        /// Ensures a valid UdonSharpBehaviour is assigned.
+        /// Returns false if no manager is found to prevent broken builds.
+        /// </summary>
+        private bool ValidateBackingLogic(HorizonGUIAuthoring authoring)
+        {
+            if (authoring.backingLogic == null)
+            {
+                authoring.backingLogic = authoring.GetComponent<UdonSharp.UdonSharpBehaviour>();
+                if (authoring.backingLogic != null)
+                {
+                    EditorUtility.SetDirty(authoring);
+                }
+                else
+                {
+                    Debug.LogError("[Horizon] CRITICAL: No Backing Logic found! Please add a HorizonGUIManager component.");
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// Initializes or retrieves the WorldSpace Canvas and configures its root transform.
+        /// </summary>
+        private GameObject PrepareCanvasRoot(HorizonGUIAuthoring authoring)
+        {
+            Transform container = authoring.transform.Find(GENERATED_CANVAS_NAME);
             if (container == null)
             {
-                GameObject go = new GameObject(rootName);
+                GameObject go = new GameObject(GENERATED_CANVAS_NAME);
                 go.transform.SetParent(authoring.transform, false);
                 container = go.transform;
             }
@@ -72,52 +139,124 @@ namespace BlackHorizon.HorizonGUI
             GraphicRaycaster gr = canvasObj.GetComponent<GraphicRaycaster>();
             if (gr == null) gr = canvasObj.AddComponent<GraphicRaycaster>();
 
-            canvasObj.transform.localScale = Vector3.one * 0.001f;
-            canvasObj.transform.localPosition = Vector3.zero;
-            canvasObj.transform.localRotation = Quaternion.identity;
+            RectTransform rt = canvasObj.GetComponent<RectTransform>();
+            rt.localScale = Vector3.one * 0.001f;
+            rt.localPosition = Vector3.zero;
+            rt.localRotation = Quaternion.identity;
+            rt.sizeDelta = new Vector2(DEFAULT_CANVAS_WIDTH, DEFAULT_CANVAS_HEIGHT);
 
-            var vlg = canvasObj.GetComponent<VerticalLayoutGroup>();
-            if (vlg == null) vlg = canvasObj.AddComponent<VerticalLayoutGroup>();
-            vlg.childControlWidth = true;
-            vlg.childControlHeight = true;
-            vlg.childForceExpandWidth = false;
-            vlg.childForceExpandHeight = false;
-            vlg.childAlignment = TextAnchor.MiddleCenter;
+            return canvasObj;
+        }
 
-            var fitter = canvasObj.GetComponent<ContentSizeFitter>();
-            if (fitter == null) fitter = canvasObj.AddComponent<ContentSizeFitter>();
-            fitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+        /// <summary>
+        /// Clears all children from the generated canvas to prepare for a fresh build.
+        /// </summary>
+        private void ClearExistingGeneratedUI(GameObject canvasObj)
+        {
+            while (canvasObj.transform.childCount > 0)
+                DestroyImmediate(canvasObj.transform.GetChild(0).gameObject);
+        }
 
-            Debug.Log("<b>[Horizon]</b> Building GameObjects...");
+        /// <summary>
+        /// Creates the background layers: Stencil Mask, Glass Blur, and the Content container.
+        /// </summary>
+        private void SetupVisualLayers(GameObject canvasObj, out GameObject contentRoot)
+        {
+            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
 
-            HorizonCompiler.BuildInterface(canvasObj, rootNode, styleSheet, authoring.backingLogic);
+            GameObject bgObj = HorizonGUIFactory.CreateBlock("Global_Background", canvasObj);
+            HorizonGUIFactory.Stretch(bgObj);
 
+            Image maskImg = bgObj.AddComponent<Image>();
+            maskImg.sprite = bgSprite;
+            maskImg.type = Image.Type.Sliced;
+            maskImg.raycastTarget = false;
+            maskImg.color = Color.white;
+
+            Mask mask = bgObj.AddComponent<Mask>();
+            mask.showMaskGraphic = false;
+
+            GameObject glass = HorizonGUIFactory.CreatePanel("Glass_Layer", bgObj, HorizonGUIFactory.ColorGlassDark, bgSprite);
+            HorizonGUIFactory.Stretch(glass);
+            glass.GetComponent<Image>().material = HorizonGUIFactory.GetGlassMaterial();
+            glass.transform.localPosition = new Vector3(0, 0, -0.5f);
+            glass.GetComponent<Image>().raycastTarget = false;
+
+            contentRoot = HorizonGUIFactory.CreateBlock("HTML_Root", canvasObj);
+            contentRoot.transform.localPosition = new Vector3(0, 0, -1.0f);
+            HorizonGUIFactory.Stretch(contentRoot);
+        }
+
+        /// <summary>
+        /// Forces layout recalculation and synchronizes BoxColliders with RectTransform bounds.
+        /// </summary>
+        private void FinalizeLayoutAndPhysics(GameObject canvasObj, RectTransform rootRect)
+        {
             Canvas.ForceUpdateCanvases();
 
             foreach (var layout in canvasObj.GetComponentsInChildren<LayoutGroup>())
                 LayoutRebuilder.ForceRebuildLayoutImmediate(layout.GetComponent<RectTransform>());
 
-            LayoutRebuilder.ForceRebuildLayoutImmediate(canvasObj.GetComponent<RectTransform>());
+            LayoutRebuilder.ForceRebuildLayoutImmediate(rootRect);
 
-            var buttons = canvasObj.GetComponentsInChildren<Button>();
-            foreach (var btn in buttons)
+            foreach (var btn in canvasObj.GetComponentsInChildren<Button>())
             {
                 BoxCollider col = btn.GetComponent<BoxCollider>();
                 RectTransform rt = btn.GetComponent<RectTransform>();
-
                 if (col != null && rt != null)
                 {
                     col.size = new Vector3(rt.rect.width, rt.rect.height, 10f);
-                    col.center = new Vector3(0, 0, 0);
+                    col.center = Vector3.zero;
                 }
             }
 
-            HorizonGUIFactory.AddInteraction(canvasObj, canvasObj.GetComponent<RectTransform>().sizeDelta);
+            HorizonGUIFactory.AddInteraction(canvasObj, rootRect.sizeDelta);
+        }
 
-            HorizonGUIBaker.BakeInterface(canvasObj.name);
+        /// <summary>
+        /// Automatically links generated modules and external systems (like Weather) to the HorizonGUIManager.
+        /// </summary>
+        private void PerformLogicBinding(HorizonGUIAuthoring authoring, GameObject contentRoot)
+        {
+            var manager = authoring.GetComponent<HorizonGUIManager>();
+            if (manager == null) return;
 
-            Debug.Log($"[Horizon] Build Complete. Root: {canvasObj.name}");
+            var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
+
+            var foundModules = contentRoot.GetComponentsInChildren<HorizonGUIModule>(true);
+            if (foundModules.Length > 0)
+                binder.BindArray("modules", new System.Collections.Generic.List<HorizonGUIModule>(foundModules));
+
+            var wSys = Object.FindObjectOfType<BlackHorizon.HorizonWeatherTime.WeatherTimeSystem>();
+            if (wSys != null)
+            {
+                binder.Bind("weatherSystem", wSys);
+                binder.BindVal("weatherVersion", GetPackageVersion("com.blackhorizon.horizonweathertime"));
+            }
+
+            binder.Apply();
+        }
+
+        /// <summary>
+        /// Retrieves the version string from a package's package.json file.
+        /// Logs a warning if the file cannot be read.
+        /// </summary>
+        private string GetPackageVersion(string packageName)
+        {
+            try
+            {
+                string path = $"Packages/{packageName}/package.json";
+                if (System.IO.File.Exists(path))
+                {
+                    var pkg = JsonUtility.FromJson<PackageInfo>(System.IO.File.ReadAllText(path));
+                    return pkg.version;
+                }
+            }
+            catch (System.Exception ex)
+            {
+                Debug.LogWarning($"[Horizon] Failed to read version for '{packageName}': {ex.Message}");
+            }
+            return "?.?.?";
         }
     }
 }

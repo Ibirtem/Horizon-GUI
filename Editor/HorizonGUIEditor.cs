@@ -1,5 +1,7 @@
 using UnityEngine;
+using UnityEngine.UI;
 using UnityEditor;
+using System.Collections.Generic;
 
 namespace BlackHorizon.HorizonGUI
 {
@@ -22,24 +24,18 @@ namespace BlackHorizon.HorizonGUI
 
         private void AutoLinkTabs(HorizonGUIManager manager)
         {
-            if (manager.pageContentContainer != null)
+            var modulesList = new List<HorizonGUIModule>();
+            var foundModules = manager.GetComponentsInChildren<HorizonGUIModule>(true);
+
+            if (foundModules.Length > 0)
             {
-                var modulesList = new System.Collections.Generic.List<HorizonGUIModule>();
-                foreach (Transform t in manager.pageContentContainer)
-                {
-                    var module = t.GetComponent<HorizonGUIModule>();
-                    if (module != null)
-                    {
-                        modulesList.Add(module);
-                    }
-                }
-                manager.modules = modulesList.ToArray();
+                manager.modules = foundModules;
                 EditorUtility.SetDirty(manager);
-                Debug.Log($"[HorizonGUI] Auto-linked {modulesList.Count} modules found in PageContainer.");
+                Debug.Log($"[HorizonGUI] Auto-linked {foundModules.Length} modules found in hierarchy.");
             }
             else
             {
-                Debug.LogWarning("[HorizonGUI] Page Content Container is not assigned in Manager.");
+                Debug.LogWarning("[HorizonGUI] No HorizonGUIModule components found in children.");
             }
         }
     }

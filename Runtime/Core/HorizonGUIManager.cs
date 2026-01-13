@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using BlackHorizon.HorizonWeatherTime;
 
 #if UDONSHARP
 using UdonSharp;
@@ -10,116 +11,235 @@ using VRC.Udon;
 
 namespace BlackHorizon.HorizonGUI
 {
+    /// <summary>
+    /// Central controller for the Horizon UI System.
+    /// Handles navigation between modules, global overlays, and core system logic (Clock, Weather, Player Grid).
+    /// UI references are automatically populated by the HorizonCompiler via 'u-bind' attributes.
+    /// </summary>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-#if UDONSHARP
     public class HorizonGUIManager : UdonSharpBehaviour
-#else
-    public class HorizonGUIManager : MonoBehaviour
-#endif
     {
-        [Header("Runtime References")]
-        public Transform pageContentContainer;
+        [Header("System Core")]
+        [Tooltip("List of all top-level modules. Managed by the compiler.")]
+        public HorizonGUIModule[] modules;
 
-        /// <summary>
-        /// A specialized high-priority canvas layer rendered on top of everything else.
-        /// Used for Modals, Alerts, and Popups. 
-        /// Controlled via ToggleOverlay().
-        /// </summary>
+        [Tooltip("Global modal/overlay container.")]
         public GameObject overlayContainer;
 
-        [Header("Styling")]
+        [Header("Navigation State")]
         public Color activeTabColor = new Color(1f, 1f, 1f, 0.2f);
         public Color inactiveTabColor = new Color(0f, 0f, 0f, 0.0f);
 
-        [Header("Pre-Baked References")]
-        [Tooltip("List of modules in the scene.")]
-        public HorizonGUIModule[] modules;
-
-        [Tooltip("List of navigation buttons corresponding to modules.")]
-        public HorizonGUINavigationButton[] navigationButtons;
-
-        [Header("Clock")]
+        [Header("Binding Targets (Auto-populated)")]
+        public Image btnNavHome;
+        public Image btnNavWeather;
+        public Image btnNavAbout;
         public TextMeshProUGUI clockText;
-        public bool use24HourFormat = true;
+        public TextMeshProUGUI instanceInfoText;
+        public HorizonDataGrid playerGrid;
 
-        private int _currentTabIndex = -1;
+        [Header("Weather Integration")]
+        public WeatherTimeSystem weatherSystem;
+        public TextMeshProUGUI weatherStatusText;
+        public TextMeshProUGUI weatherVersionText;
+        public Toggle realTimeToggle;
+        public Slider timeSlider;
+        [System.NonSerialized] public string weatherVersion = "?.?.?";
+
+        [Header("Module Specific Fields")]
+        public TMP_InputField githubField;
+        public TMP_InputField linkField;
+
+        private int _currentTabIndex = 0;
+
+        /// <summary>
+        /// Property used by HorizonDataGrid to pass the selected item ID back to the manager.
+        /// </summary>
+        [System.NonSerialized] public int _lastEventInt;
 
         private void Start()
         {
-            if (modules != null && modules.Length > 0)
-            {
-                _currentTabIndex = 0;
-
-                for (int i = 0; i < modules.Length; i++)
-                {
-                    if (modules[i] != null) modules[i].gameObject.SetActive(i == _currentTabIndex);
-                }
-
-                UpdateNavigationVisuals();
-            }
+            InitializeUI();
+            OpenTab(0);
         }
 
         private void Update()
         {
-            if (clockText != null)
-            {
-                System.DateTime now = System.DateTime.Now;
-                string format = use24HourFormat ? "d MMMM HH:mm" : "d MMMM h:mm tt";
-                clockText.text = now.ToString(format);
-            }
+            UpdateSystemClock();
+
+            if (Time.frameCount % 120 == 0) UpdatePlayerList();
+
+            if (_currentTabIndex == 1) SyncWeatherTime();
         }
 
+        #region System Initialization
+
+        private void InitializeUI()
+        {
+            if (githubField != null) githubField.text = "https://github.com/Ibirtem/Horizon-GUI";
+            if (linkField != null) linkField.text = "https://boosty.to/ibirtem";
+
+            UpdatePlayerList();
+            SyncWeatherUI();
+        }
+
+        private void UpdateSystemClock()
+        {
+            if (clockText != null)
+                clockText.text = System.DateTime.Now.ToString("dd MMM, HH:mm");
+        }
+
+        #endregion
+
+        #region Navigation Logic
+
+        public void OnNavHome() => OpenTab(0);
+        public void OnNavWeather() => OpenTab(1);
+        public void OnNavAbout() => OpenTab(2);
+
+        /// <summary>
+        /// Switches the active module and updates navigation button visuals.
+        /// </summary>
+        /// <param name="index">The index of the module to display.</param>
         public void OpenTab(int index)
         {
             if (modules == null || index < 0 || index >= modules.Length) return;
-            if (index == _currentTabIndex) return;
-
-            if (_currentTabIndex >= 0 && _currentTabIndex < modules.Length)
-            {
-                if (modules[_currentTabIndex] != null) modules[_currentTabIndex].OnHide();
-            }
 
             _currentTabIndex = index;
-            if (modules[_currentTabIndex] != null)
+
+            for (int i = 0; i < modules.Length; i++)
             {
-                modules[_currentTabIndex].OnShow();
+                if (modules[i] != null) modules[i].gameObject.SetActive(i == index);
             }
 
-            UpdateNavigationVisuals();
+            UpdateNavigationVisuals(index);
+
+            if (index == 0) UpdatePlayerList();
+            if (index == 1) SyncWeatherUI();
         }
 
-        private void UpdateNavigationVisuals()
+        private void UpdateNavigationVisuals(int activeIndex)
         {
-            if (navigationButtons == null) return;
-
-            for (int i = 0; i < navigationButtons.Length; i++)
-            {
-                if (navigationButtons[i] != null)
-                {
-                    navigationButtons[i].UpdateVisuals(i == _currentTabIndex, activeTabColor, inactiveTabColor);
-                }
-            }
+            SetButtonState(btnNavHome, activeIndex == 0);
+            SetButtonState(btnNavWeather, activeIndex == 1);
+            SetButtonState(btnNavAbout, activeIndex == 2);
         }
+
+        private void SetButtonState(Image btnBg, bool isActive)
+        {
+            if (btnBg != null) btnBg.color = isActive ? activeTabColor : inactiveTabColor;
+        }
+
+        #endregion
+
+        #region Module: Home (Player Grid)
 
         /// <summary>
-        /// Shows or hides the global overlay layer.
-        /// Use this when you want to block input to the rest of the UI and show a modal window.
+        /// Fetches the current player list. 
+        /// Populates names in the data array for internal grid logic, 
+        /// even if the current visual style (Circle) hides them.
         /// </summary>
-        /// <param name="show">If true, enables the dark background and blocks underlying clicks.</param>
+        public void UpdatePlayerList()
+        {
+            int playerCount = 0;
+#if UDONSHARP
+            playerCount = VRCPlayerApi.GetPlayerCount();
+#else
+            playerCount = 1;
+#endif
+
+            if (instanceInfoText != null) instanceInfoText.text = $"Instance Players: {playerCount}";
+
+            if (playerGrid != null)
+            {
+#if UDONSHARP
+                VRCPlayerApi[] players = new VRCPlayerApi[playerCount];
+                VRCPlayerApi.GetPlayers(players);
+
+                int[] ids = new int[playerCount];
+                string[] names = new string[playerCount];
+                for (int i = 0; i < playerCount; i++)
+                {
+                    if (Utilities.IsValid(players[i]))
+                    {
+                        ids[i] = players[i].playerId;
+                        names[i] = players[i].displayName;
+                    }
+                }
+                playerGrid.LoadData(ids, names, null); 
+#else
+                playerGrid.LoadData(new int[] { 1 }, new string[] { "Editor" }, null);
+#endif
+            }
+        }
+
+        public void OnPlayerSlotClicked()
+        {
+            Debug.Log($"[Horizon] Selected Player ID: {_lastEventInt}");
+        }
+
+        #endregion
+
+        #region Module: Weather
+
+        private void SyncWeatherUI()
+        {
+            if (weatherSystem == null) return;
+
+            if (weatherVersionText != null) weatherVersionText.text = $"v{weatherVersion}";
+            if (weatherStatusText != null) weatherStatusText.text = "Status: <color=#33FF33>Connected</color>";
+            if (realTimeToggle != null) realTimeToggle.isOn = weatherSystem.useRealTime;
+
+            SyncWeatherTime();
+        }
+
+        private void SyncWeatherTime()
+        {
+            if (weatherSystem == null || timeSlider == null) return;
+
+            if (weatherSystem.useRealTime)
+            {
+                timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
+            }
+            timeSlider.interactable = !weatherSystem.useRealTime;
+        }
+
+        public void OnRealTimeChanged()
+        {
+            if (weatherSystem == null || realTimeToggle == null) return;
+
+            weatherSystem.useRealTime = realTimeToggle.isOn;
+            if (realTimeToggle.isOn) weatherSystem.ReleaseExternalControl();
+
+            SyncWeatherUI();
+        }
+
+        public void OnTimeSliderChanged()
+        {
+            if (weatherSystem == null || timeSlider == null || weatherSystem.useRealTime) return;
+            weatherSystem.SetExternalTime(timeSlider.value);
+        }
+
+        public void OnProfileClear() => SetWeather(0);
+        public void OnProfileSnow() => SetWeather(1);
+        public void OnProfileRain() => SetWeather(2);
+
+        private void SetWeather(int index)
+        {
+            if (weatherSystem != null) weatherSystem.SetWeatherProfile(index);
+        }
+
+        #endregion
+
+        #region Global Overlays
+
         public void ToggleOverlay(bool show)
         {
-            if (overlayContainer != null)
-            {
-                overlayContainer.SetActive(show);
-            }
+            if (overlayContainer != null) overlayContainer.SetActive(show);
         }
 
-        /// <summary>
-        /// Helper method for UI Buttons to close the overlay (since they can't pass bools easily).
-        /// </summary>
-        public void CloseOverlay()
-        {
-            ToggleOverlay(false);
-        }
+        public void CloseOverlay() => ToggleOverlay(false);
+
+        #endregion
     }
 }
