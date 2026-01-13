@@ -29,9 +29,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             // Attachment of core logic and authoring components
             systemRoot.AddComponent<HorizonGUIManager>();
-
-            var authoring = systemRoot.AddComponent<HorizonGUIAuthoring>();
-            authoring.theme = HorizonGUIFactory.Theme;
+            systemRoot.AddComponent<HorizonGUIAuthoring>();
 
             Debug.Log("<color=#33FF33>[Horizon]</color> UI System initialized. Please assign your HTML/CSS files in the Inspector.");
         }

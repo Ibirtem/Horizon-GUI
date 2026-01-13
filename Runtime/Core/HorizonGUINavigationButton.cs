@@ -21,11 +21,6 @@ namespace BlackHorizon.HorizonGUI
         public int tabIndex;
         public HorizonGUIManager manager;
 
-        [Header("Visuals")]
-        public Image background;
-        public Image icon;
-        public TextMeshProUGUI label;
-
         public void OnClick()
         {
             if (manager != null)
@@ -35,18 +30,6 @@ namespace BlackHorizon.HorizonGUI
             else
             {
                 Debug.LogError($"<b><color=#FF3333>[ERROR]</color></b> <color=white>[HorizonGUI] Manager is NULL on button '{gameObject.name}'!</color>");
-            }
-        }
-
-        /// <summary>
-        /// Updates only the state background. 
-        /// Interaction highlights (hover) are handled natively by the Button component on a separate layer.
-        /// </summary>
-        public void UpdateVisuals(bool isActive, Color colActive, Color colInactive)
-        {
-            if (background != null)
-            {
-                background.color = isActive ? colActive : colInactive;
             }
         }
     }

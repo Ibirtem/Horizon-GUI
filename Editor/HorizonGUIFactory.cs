@@ -17,46 +17,26 @@ namespace BlackHorizon.HorizonGUI.Editor
     /// </summary>
     public static class HorizonGUIFactory
     {
-        private static HorizonTheme _currentTheme;
-        private static HorizonTheme _overrideTheme;
         private const string GENERATED_SPRITE_PATH = "Assets/Horizon GUI/Textures/Horizon_RoundedBackground.png";
 
-        #region Theme Management
+        #region Default Theme Constants
 
-        /// <summary>
-        /// Provides a temporary theme context for a specific build operation.
-        /// </summary>
-        public static void SetThemeContext(HorizonTheme theme) => _overrideTheme = theme;
+        // Default styling fallbacks. 
+        // These are used when CSS does not provide specific overrides.
 
-        /// <summary>
-        /// Retrieves the active UI theme. Defaults to the first found HorizonTheme asset in the project.
-        /// </summary>
-        public static HorizonTheme Theme
-        {
-            get
-            {
-                if (_overrideTheme != null) return _overrideTheme;
-                if (_currentTheme == null)
-                {
-                    string[] guids = AssetDatabase.FindAssets("t:HorizonTheme");
-                    if (guids.Length > 0)
-                    {
-                        string path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                        _currentTheme = AssetDatabase.LoadAssetAtPath<HorizonTheme>(path);
-                    }
-                    else
-                    {
-                        _currentTheme = ScriptableObject.CreateInstance<HorizonTheme>();
-                    }
-                }
-                return _currentTheme;
-            }
-        }
+        public static readonly Color ColorPrimary = new Color(1f, 1f, 1f, 0.9f);
+        public static readonly Color ColorSecondary = new Color(1f, 1f, 1f, 0.5f);
+        public static readonly Color ColorGlass = new Color(1f, 1f, 1f, 0.1f);
+        public static readonly Color ColorPanel = new Color(0f, 0f, 0f, 0.2f);
 
-        public static Color ColorGlassDark => Theme.glassColor;
-        public static Color ColorSidebar => Theme.panelColor;
-        public static Color ColorTextWhite => Theme.primaryColor;
-        public static Color ColorTextDim => Theme.secondaryColor;
+        private const float SIZE_CLOCK = 54f;
+        private const float SIZE_H1 = 48f;
+        private const float SIZE_H2 = 42f;
+        private const float SIZE_BODY = 24f;
+        private const float SIZE_SMALL = 18f;
+
+        // Public accessors for compatibility with Compiler
+        public static Color ColorGlassDark => ColorGlass;
 
         #endregion
 
@@ -92,7 +72,6 @@ namespace BlackHorizon.HorizonGUI.Editor
             {
                 img.sprite = sprite;
                 img.type = Image.Type.Sliced;
-                // Default multiplier for crisp edges on rounded rectangles
                 img.pixelsPerUnitMultiplier = 3.0f;
             }
             return go;
@@ -282,19 +261,20 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             switch (style)
             {
-                case TextStyle.H1: tmp.fontSize = Theme.sizeH1; tmp.fontStyle = FontStyles.Bold; break;
-                case TextStyle.H2: tmp.fontSize = Theme.sizeH2; tmp.fontStyle = FontStyles.Bold; break;
-                case TextStyle.Body: tmp.fontSize = Theme.sizeBody; tmp.color = Theme.primaryColor; break;
-                case TextStyle.BodyDim: tmp.fontSize = Theme.sizeBody; tmp.color = Theme.secondaryColor; break;
-                case TextStyle.Small: tmp.fontSize = Theme.sizeSmall; tmp.color = Theme.primaryColor; break;
-                case TextStyle.SmallDim: tmp.fontSize = Theme.sizeSmall; tmp.color = Theme.secondaryColor; break;
-                case TextStyle.Clock: tmp.fontSize = Theme.sizeClock * 1.3f; tmp.color = Theme.secondaryColor; break;
+                case TextStyle.H1: tmp.fontSize = SIZE_H1; tmp.fontStyle = FontStyles.Bold; break;
+                case TextStyle.H2: tmp.fontSize = SIZE_H2; tmp.fontStyle = FontStyles.Bold; break;
+                case TextStyle.Body: tmp.fontSize = SIZE_BODY; tmp.color = ColorPrimary; break;
+                case TextStyle.BodyDim: tmp.fontSize = SIZE_BODY; tmp.color = ColorSecondary; break;
+                case TextStyle.Small: tmp.fontSize = SIZE_SMALL; tmp.color = ColorPrimary; break;
+                case TextStyle.SmallDim: tmp.fontSize = SIZE_SMALL; tmp.color = ColorSecondary; break;
+                case TextStyle.Clock: tmp.fontSize = SIZE_CLOCK * 1.3f; tmp.color = ColorSecondary; break;
             }
             return tmp;
         }
 
         /// <summary>
         /// Constructs a circular icon button with independent background and interaction layers.
+        /// Used by DataGrid.
         /// </summary>
         public static GameObject CreateIconButton(string name, GameObject parent, Sprite bgSprite, Sprite iconSprite)
         {

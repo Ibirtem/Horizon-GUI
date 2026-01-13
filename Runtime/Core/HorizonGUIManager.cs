@@ -26,14 +26,7 @@ namespace BlackHorizon.HorizonGUI
         [Tooltip("Global modal/overlay container.")]
         public GameObject overlayContainer;
 
-        [Header("Navigation State")]
-        public Color activeTabColor = new Color(1f, 1f, 1f, 0.2f);
-        public Color inactiveTabColor = new Color(0f, 0f, 0f, 0.0f);
-
         [Header("Binding Targets (Auto-populated)")]
-        public Image btnNavHome;
-        public Image btnNavWeather;
-        public Image btnNavAbout;
         public TextMeshProUGUI clockText;
         public TextMeshProUGUI instanceInfoText;
         public HorizonDataGrid playerGrid;
@@ -104,22 +97,8 @@ namespace BlackHorizon.HorizonGUI
                 if (modules[i] != null) modules[i].gameObject.SetActive(i == index);
             }
 
-            UpdateNavigationVisuals(index);
-
             if (index == 0) UpdatePlayerList();
             if (index == 1) SyncWeatherUI();
-        }
-
-        private void UpdateNavigationVisuals(int activeIndex)
-        {
-            SetButtonState(btnNavHome, activeIndex == 0);
-            SetButtonState(btnNavWeather, activeIndex == 1);
-            SetButtonState(btnNavAbout, activeIndex == 2);
-        }
-
-        private void SetButtonState(Image btnBg, bool isActive)
-        {
-            if (btnBg != null) btnBg.color = isActive ? activeTabColor : inactiveTabColor;
         }
 
         #endregion
