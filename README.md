@@ -8,13 +8,17 @@ Horizon is a system designed to bridge the gap between Udon code and visual UI e
 
 ## Key Features
 
-- **Builder Workflow**
-  Generate complex layouts (Columns, Grids, Sidebars) programmatically or via configuration, rather than placing RectTransforms manually.
-- **Theme System**
-  Centralized "CSS-like" styling. Change colors and font sizes in one ScriptableObject, and the entire UI updates upon rebuild.
+- **Markup-Based Workflow**
+  Define your UI structure using standard **HTML** and style it with **CSS**. No need to manually position RectTransforms or compile complex C# factories.
+
+- **CSS Styling**
+  Centralized styling system. Change colors, rounding, and fonts in a standard `.css` file, and the entire UI updates upon rebuild.
+
+- **Declarative Logic (`u-script`)**
+  Assign specific UdonSharp behaviours to different modules directly in HTML. Decompose your logic into small, manageable scripts.
 
 - **Auto-Binding**
-  Automatically detects UI components and links them to your UdonSharp behaviours. Removes the need for manual event assignment in the Inspector.
+  Automatically detects UI components and links them to your UdonSharp variables and events using simple attributes (`u-bind`, `u-click`).
 
 - **Glassmorphism**
   Includes a lightweight background blur shader optimized for VR.
@@ -27,32 +31,47 @@ Horizon is a system designed to bridge the gap between Udon code and visual UI e
     Right-click in the Hierarchy: `Horizon -> Create UI System`.
 2.  **Configure:**
     Select the created object. You will see the **Horizon GUI Authoring** component.
-    Assign a **Theme** (Create one via `Create -> Horizon -> UI Theme` if needed).
-
+    Assign your `.html` and `.css` files into the respective slots.
 3.  **Build:**
-    Click the **"GENERATE INTERFACE"** button in the Inspector.
+    Click the **"COMPILE INTERFACE"** button in the Inspector.
     The system will construct the Canvas, layout, and link all Udon scripts automatically.
 
 ---
 
-## Code Example
+## Workflow Example
 
+Horizon allows you to bind logic purely through markup attributes, keeping your C# code clean from UI references.
+
+**1. HTML Definition**
+```html
+<!-- Define a module and attach a specific script to it -->
+<module id="Weather" u-script="HorizonGUI_WeatherModule">
+    
+    <h1>Weather Control</h1>
+    <hr />
+
+    <!-- Bind button click to a public method 'ToggleRain' -->
+    <button u-click="ToggleRain">
+        <icon src="cloud_rain.png" />
+    </button>
+
+    <!-- Bind slider value to a public float variable 'timeOfDay' -->
+    <input type="range" min="0" max="1" u-bind="timeOfDay" />
+
+</module>
+```
+
+**2. C# Logic (UdonSharp)**
 ```csharp
-public HorizonGUIModule BuildPage(GameObject container)
+public class HorizonGUI_WeatherModule : UdonSharpBehaviour
 {
-    // Create a simple column
-    var page = HorizonGUIFactory.CreateColumn("MyPage", container, spacing: 20);
+    // Automatically linked by 'u-bind="timeOfDay"'
+    public Slider timeOfDay; 
 
-    // Add a styled header
-    HorizonGUIFactory.CreateText(page, "Settings", HorizonGUIFactory.TextStyle.H1);
-
-    // Add a toggle
-    var toggle = HorizonGUIFactory.CreateToggle(page, "Enable Magic", true);
-
-    // Bind logic automatically
-    return HorizonGUIFactory.ConfigureLogic<MyScript>(page, binder =>
+    // Automatically called by 'u-click="ToggleRain"'
+    public void ToggleRain()
     {
-        binder.Bind("toggleReference", toggle);
-    });
+        Debug.Log("Rain toggled!");
+    }
 }
 ```
