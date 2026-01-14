@@ -46,7 +46,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, UdonSharpBehaviour contextLogic, HorizonResourceMap resourceMap)
         {
             GameObject createdObj = null;
+
             var styles = styleSheet.GetComputedStyle(node);
+
+            if (node.Attributes.TryGetValue("style", out string inlineStyle))
+            {
+                var overrides = ParseInlineStyle(inlineStyle);
+                foreach (var kvp in overrides)
+                {
+                    styles[kvp.Key] = kvp.Value;
+                }
+            }
             string tag = node.Tag.ToLower();
 
             UdonSharpBehaviour nextContext = contextLogic;
@@ -175,6 +185,26 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return wrapper;
         }
 
+        private static Dictionary<string, string> ParseInlineStyle(string styleString)
+        {
+            var styles = new Dictionary<string, string>();
+            if (string.IsNullOrWhiteSpace(styleString)) return styles;
+
+            string[] parts = styleString.Split(';');
+            foreach (var part in parts)
+            {
+                if (string.IsNullOrWhiteSpace(part)) continue;
+                int colonIndex = part.IndexOf(':');
+                if (colonIndex > 0)
+                {
+                    string key = part.Substring(0, colonIndex).Trim().ToLower();
+                    string val = part.Substring(colonIndex + 1).Trim();
+                    styles[key] = val;
+                }
+            }
+            return styles;
+        }
+
         /// <summary>
         /// Constructs a Module container and evaluates the <c>u-script</c> attribute.
         /// <para>
@@ -245,7 +275,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             GameObject go = manager.gameObject;
 
-            ApplyLayoutStyles(go, styles);
+            ApplyLayoutStyles(go, styles, node);
             ApplyContainerStyles(go, styles, node);
 
             return go;
@@ -269,7 +299,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             if (col == null) col = go.AddComponent<BoxCollider>();
             col.isTrigger = true;
 
-            ApplyLayoutStyles(go, styles);
+            ApplyLayoutStyles(go, styles, node);
             ApplyContainerStyles(go, styles, node);
 
             return go;
@@ -336,7 +366,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         {
             GameObject go = HorizonGUIFactory.CreateBlock(name, parent);
             ApplyContainerStyles(go, styles, node);
-            ApplyLayoutStyles(go, styles);
+            ApplyLayoutStyles(go, styles, node);
             return go;
         }
 
@@ -482,13 +512,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
 
             HorizonGUIFactory.SetLayoutSize(go, 32, 32, 32, 32);
-            ApplyLayoutStyles(go, styles);
+            ApplyLayoutStyles(go, styles, node);
             return go;
         }
 
         /// <summary>
         /// Links Unity UI events to UdonSharp events and binds properties to script variables.
-        /// Performs validation to ensure target methods and variables actually exist.
+        /// Handles GameObject vs Component type matching and performs validation.
         /// </summary>
         private static void ProcessLogic(GameObject obj, HorizonNode node, UdonSharpBehaviour logicTarget)
         {
@@ -538,24 +568,51 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 }
             }
 
-            // --- 2. Property Validation (u-bind) ---
+            // --- 2. Property Validation & Binding (u-bind) ---
             if (node.Attributes.TryGetValue("u-bind", out string varName))
             {
-                Component comp = obj.GetComponent<TMP_InputField>();
-                if (comp == null) comp = obj.GetComponent<Slider>();
-                if (comp == null) comp = obj.GetComponent<Toggle>();
-                if (comp == null) comp = obj.GetComponent<HorizonDataGrid>();
-                if (comp == null) comp = obj.GetComponent<TextMeshProUGUI>();
-                if (comp == null) comp = obj.GetComponent<Transform>();
-
                 var binder = new HorizonGUIFactory.HorizonLogicBinder(logicTarget);
-                bool success = binder.Bind(varName, comp);
+
+                var fieldInfo = logicTarget.GetType().GetField(varName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+
+                UnityEngine.Object valueToBind = null;
+
+                if (fieldInfo != null)
+                {
+                    if (fieldInfo.FieldType == typeof(GameObject))
+                    {
+                        valueToBind = obj;
+                    }
+                    else if (typeof(Component).IsAssignableFrom(fieldInfo.FieldType))
+                    {
+                        valueToBind = obj.GetComponent(fieldInfo.FieldType);
+
+                        if (valueToBind == null)
+                        {
+                            if (fieldInfo.FieldType == typeof(Transform)) valueToBind = obj.transform;
+                        }
+                    }
+                }
+
+                if (valueToBind == null)
+                {
+                    Component c = obj.GetComponent<TMP_InputField>();
+                    if (c == null) c = obj.GetComponent<Slider>();
+                    if (c == null) c = obj.GetComponent<Toggle>();
+                    if (c == null) c = obj.GetComponent<HorizonDataGrid>();
+                    if (c == null) c = obj.GetComponent<TextMeshProUGUI>();
+                    if (c == null) c = obj.transform;
+                    valueToBind = c;
+                }
+
+                bool success = binder.Bind(varName, valueToBind);
 
                 if (!success)
                 {
                     ValidationErrors++;
-                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Variable <b>'{varName}'</b> not found (or not public) in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
-                                   $"Context: <{node.Tag} u-bind='{varName}'>... in GameObject '{obj.name}'");
+                    string typeHint = fieldInfo != null ? $" (Type: {fieldInfo.FieldType.Name})" : "";
+                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Variable <b>'{varName}'</b>{typeHint} binding failed in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
+                                   $"Context: <{node.Tag} u-bind='{varName}'>... in GameObject '{obj.name}'. Check if the component exists or type matches.");
                 }
                 else
                 {
@@ -664,9 +721,24 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
         /// <summary>
         /// Applies LayoutElement properties (width, height, flex-grow) to the GameObject.
+        /// Handles 'ignore-layout' for overlay positioning.
         /// </summary>
-        private static void ApplyLayoutStyles(GameObject go, Dictionary<string, string> styles)
+        private static void ApplyLayoutStyles(GameObject go, Dictionary<string, string> styles, HorizonNode node = null)
         {
+            if (node != null && node.Attributes.ContainsKey("ignore-layout"))
+            {
+                LayoutElement le = go.AddComponent<LayoutElement>();
+                le.ignoreLayout = true;
+
+                HorizonGUIFactory.Stretch(go);
+
+                RectTransform rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.sizeDelta = Vector2.zero;
+                return;
+            }
+
             float w = ParseFloat(styles, "width", -1);
             float h = ParseFloat(styles, "height", -1);
             float flex = ParseFloat(styles, "flex-grow", -1);

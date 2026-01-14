@@ -144,3 +144,19 @@ toggle {
 .link-row input {
     flex-grow: 1;
 }
+
+/* --- OVERLAYS --- */
+.modal-window {
+    width: 500px;
+    height: 300px;
+    background-color: #1a1a1ae6;
+    padding: 30px;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-btn {
+    height: 50px;
+    width: 200px;
+    background-color: #FFFFFF1A;
+}

@@ -143,8 +143,6 @@ namespace BlackHorizon.HorizonGUI
 
             PerformLogicBinding(authoring, contentRoot);
 
-            HorizonGUIBaker.BakeInterface(canvasObj.name);
-
             int errors = HorizonCompiler.ValidationErrors;
             if (errors > 0)
             {
