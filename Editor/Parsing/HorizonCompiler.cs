@@ -16,6 +16,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
     /// </summary>
     public static class HorizonCompiler
     {
+        public static int ValidationErrors { get; private set; }
+
         /// <summary>
         /// Clears the existing UI and rebuilds the interface from the provided node tree.
         /// </summary>
@@ -25,6 +27,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <param name="logicTarget">The UdonSharpBehaviour that receives events and bindings.</param>
         public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic, HorizonResourceMap resourceMap)
         {
+            ValidationErrors = 0;
+
             while (rootContainer.transform.childCount > 0)
                 GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
 
@@ -484,43 +488,57 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
         /// <summary>
         /// Links Unity UI events to UdonSharp events and binds properties to script variables.
+        /// Performs validation to ensure target methods and variables actually exist.
         /// </summary>
         private static void ProcessLogic(GameObject obj, HorizonNode node, UdonSharpBehaviour logicTarget)
         {
             if (logicTarget == null) return;
 
+            // --- 1. Event Validation (u-click) ---
             if (node.Tag.ToLower() != "h-grid" && node.Attributes.TryGetValue("u-click", out string methodName))
             {
-                Button btn = obj.GetComponent<Button>();
-                Toggle tog = obj.GetComponent<Toggle>();
-                Slider sld = obj.GetComponent<Slider>();
+                var methodInfo = logicTarget.GetType().GetMethod(methodName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
 
-                UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(logicTarget);
-                if (backing == null) backing = logicTarget.GetComponent<UdonBehaviour>();
-
-                if (backing != null)
+                if (methodInfo == null)
                 {
-                    if (btn != null)
+                    ValidationErrors++;
+                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Method <b>'{methodName}'</b> not found in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
+                                   $"Context: <{node.Tag} u-click='{methodName}'>... in GameObject '{obj.name}'");
+                }
+                else
+                {
+                    Button btn = obj.GetComponent<Button>();
+                    Toggle tog = obj.GetComponent<Toggle>();
+                    Slider sld = obj.GetComponent<Slider>();
+
+                    UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(logicTarget);
+                    if (backing == null) backing = logicTarget.GetComponent<UdonBehaviour>();
+
+                    if (backing != null)
                     {
-                        int count = btn.onClick.GetPersistentEventCount();
-                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(btn.onClick, i);
-                        UnityEventTools.AddStringPersistentListener(btn.onClick, backing.SendCustomEvent, methodName);
-                    }
-                    else if (tog != null)
-                    {
-                        int count = tog.onValueChanged.GetPersistentEventCount();
-                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(tog.onValueChanged, i);
-                        UnityEventTools.AddStringPersistentListener(tog.onValueChanged, backing.SendCustomEvent, methodName);
-                    }
-                    else if (sld != null)
-                    {
-                        int count = sld.onValueChanged.GetPersistentEventCount();
-                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(sld.onValueChanged, i);
-                        UnityEventTools.AddStringPersistentListener(sld.onValueChanged, backing.SendCustomEvent, methodName);
+                        if (btn != null)
+                        {
+                            int count = btn.onClick.GetPersistentEventCount();
+                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(btn.onClick, i);
+                            UnityEventTools.AddStringPersistentListener(btn.onClick, backing.SendCustomEvent, methodName);
+                        }
+                        else if (tog != null)
+                        {
+                            int count = tog.onValueChanged.GetPersistentEventCount();
+                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(tog.onValueChanged, i);
+                            UnityEventTools.AddStringPersistentListener(tog.onValueChanged, backing.SendCustomEvent, methodName);
+                        }
+                        else if (sld != null)
+                        {
+                            int count = sld.onValueChanged.GetPersistentEventCount();
+                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(sld.onValueChanged, i);
+                            UnityEventTools.AddStringPersistentListener(sld.onValueChanged, backing.SendCustomEvent, methodName);
+                        }
                     }
                 }
             }
 
+            // --- 2. Property Validation (u-bind) ---
             if (node.Attributes.TryGetValue("u-bind", out string varName))
             {
                 Component comp = obj.GetComponent<TMP_InputField>();
@@ -531,8 +549,18 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 if (comp == null) comp = obj.GetComponent<Transform>();
 
                 var binder = new HorizonGUIFactory.HorizonLogicBinder(logicTarget);
-                binder.Bind(varName, comp);
-                binder.Apply();
+                bool success = binder.Bind(varName, comp);
+
+                if (!success)
+                {
+                    ValidationErrors++;
+                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Variable <b>'{varName}'</b> not found (or not public) in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
+                                   $"Context: <{node.Tag} u-bind='{varName}'>... in GameObject '{obj.name}'");
+                }
+                else
+                {
+                    binder.Apply();
+                }
             }
         }
 

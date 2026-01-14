@@ -145,7 +145,15 @@ namespace BlackHorizon.HorizonGUI
 
             HorizonGUIBaker.BakeInterface(canvasObj.name);
 
-            Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoring.name}' completed successfully.");
+            int errors = HorizonCompiler.ValidationErrors;
+            if (errors > 0)
+            {
+                Debug.LogWarning($"<color=yellow><b>[Horizon]</b></color> Build finished with <b>{errors} validation errors</b>. Please check the Console for details.");
+            }
+            else
+            {
+                Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoring.name}' completed successfully.");
+            }
         }
 
         /// <summary>

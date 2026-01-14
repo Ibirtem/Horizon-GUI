@@ -335,6 +335,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         /// <summary>
         /// Helper class to streamline property binding via SerializedObject.
+        /// Returns booleans to indicate binding success for validation.
         /// </summary>
         public class HorizonLogicBinder
         {
@@ -349,31 +350,41 @@ namespace BlackHorizon.HorizonGUI.Editor
                 _so = new SerializedObject(target);
             }
 
-            public void Bind(string propertyName, UnityEngine.Object value)
+            public bool Bind(string propertyName, UnityEngine.Object value)
             {
                 SerializedProperty prop = _so.FindProperty(propertyName);
-                if (prop != null) prop.objectReferenceValue = value;
+                if (prop != null)
+                {
+                    prop.objectReferenceValue = value;
+                    return true;
+                }
+                return false;
             }
 
-            public void BindVal(string propertyName, object value)
+            public bool BindVal(string propertyName, object value)
             {
                 SerializedProperty prop = _so.FindProperty(propertyName);
-                if (prop == null) return;
+                if (prop == null) return false;
+
                 if (value is int i) prop.intValue = i;
                 else if (value is float f) prop.floatValue = f;
                 else if (value is bool b) prop.boolValue = b;
                 else if (value is string s) prop.stringValue = s;
                 else if (value is Color c) prop.colorValue = c;
+                return true;
             }
 
-            public void BindArray<TComp>(string propertyName, System.Collections.Generic.List<TComp> list) where TComp : UnityEngine.Object
+            public bool BindArray<TComp>(string propertyName, System.Collections.Generic.List<TComp> list) where TComp : UnityEngine.Object
             {
                 SerializedProperty prop = _so.FindProperty(propertyName);
-                if (prop == null) return;
+                if (prop == null) return false;
+
                 prop.ClearArray();
                 prop.arraySize = list.Count;
                 for (int i = 0; i < list.Count; i++)
                     prop.GetArrayElementAtIndex(i).objectReferenceValue = list[i];
+
+                return true;
             }
 
             public void Apply() => _so.ApplyModifiedProperties();
