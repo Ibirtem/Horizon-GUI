@@ -10,6 +10,10 @@ namespace BlackHorizon.HorizonGUI
         public TextAsset htmlFile;
         public TextAsset cssFile;
 
+        [Header("Resources")]
+        [Tooltip("Optional: Defines where to search for images referenced in HTML.")]
+        public HorizonResourceMap resourceMap;
+
         [Header("Logic Binding")]
         [Tooltip("The UdonSharpBehaviour that will receive events (u-click) and variable links (u-bind).")]
         public UdonSharpBehaviour backingLogic;

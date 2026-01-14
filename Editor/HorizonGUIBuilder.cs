@@ -1,25 +1,24 @@
 using UnityEngine;
 using UnityEditor;
 using System.IO;
+using System.Collections.Generic;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
     /// <summary>
-    /// Entry point for creating the Horizon UI System in the Unity Hierarchy.
-    /// Handles default template copying and component initialization.
+    /// Entry point for creating the Horizon UI System.
+    /// Handles default template copying, resource map generation, and component initialization.
     /// </summary>
     public static class HorizonGUIBuilder
     {
         private const string SYSTEM_ROOT_NAME = "Horizon UI System";
+
         private const string DEFAULT_LAYOUT_NAME = "Horizon_Default_Layout";
         private const string DEFAULT_THEME_NAME = "Horizon_Default_Theme";
-        private const string USER_TEMPLATE_PATH = "Assets/Horizon GUI/Templates";
 
-        /// <summary>
-        /// Creates a new Horizon UI System GameObject with the necessary management and authoring components.
-        /// Linked to the Unity GameObject menu (Right-click in Hierarchy -> Horizon -> Create UI System).
-        /// </summary>
-        /// <param name="menuCommand">Context provided by the Unity Menu.</param>
+        private const string USER_TEMPLATES_PATH = "Assets/Horizon GUI";
+        private const string DEFAULT_RESOURCES_NAME = "Horizon_Default_Resources";
+
         [MenuItem("GameObject/Horizon/Create UI System", false, 10)]
         public static void CreateNewSystem(MenuCommand menuCommand)
         {
@@ -35,16 +34,15 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             SetupDefaultTemplates(authoring);
 
-            Debug.Log("<color=#33FF33>[Horizon]</color> UI System initialized with default templates.");
+            Debug.Log("<color=#33FF33>[Horizon]</color> UI System initialized.");
         }
 
         /// <summary>
-        /// Finds the default templates in the package, copies them to the user's project if needed,
-        /// and assigns them to the Authoring component.
+        /// Ensures templates and resource maps exist in the project, then assigns them to the authoring component.
         /// </summary>
         public static void SetupDefaultTemplates(HorizonGUIAuthoring authoring)
         {
-            EnsureUserDirectoryExists();
+            EnsureTemplateDirectoryExists();
 
             TextAsset html = GetOrCopyAsset(DEFAULT_LAYOUT_NAME, ".html");
             TextAsset css = GetOrCopyAsset(DEFAULT_THEME_NAME, ".css");
@@ -52,33 +50,76 @@ namespace BlackHorizon.HorizonGUI.Editor
             if (html != null) authoring.htmlFile = html;
             if (css != null) authoring.cssFile = css;
 
+            HorizonResourceMap resources = GetOrCreateDefaultResourceMap();
+            authoring.resourceMap = resources;
+
             EditorUtility.SetDirty(authoring);
         }
 
-        private static void EnsureUserDirectoryExists()
+        private static void EnsureTemplateDirectoryExists()
         {
-            if (!Directory.Exists(USER_TEMPLATE_PATH))
+            if (!Directory.Exists(USER_TEMPLATES_PATH))
             {
-                Directory.CreateDirectory(USER_TEMPLATE_PATH);
+                Directory.CreateDirectory(USER_TEMPLATES_PATH);
                 AssetDatabase.Refresh();
             }
         }
 
-        private static TextAsset GetOrCopyAsset(string fileName, string extension)
+        private static HorizonResourceMap GetOrCreateDefaultResourceMap()
         {
-            string destPath = $"{USER_TEMPLATE_PATH}/{fileName}{extension}";
+            string assetPath = $"{USER_TEMPLATES_PATH}/{DEFAULT_RESOURCES_NAME}.asset";
 
-            TextAsset existing = AssetDatabase.LoadAssetAtPath<TextAsset>(destPath);
+            var existing = AssetDatabase.LoadAssetAtPath<HorizonResourceMap>(assetPath);
             if (existing != null) return existing;
 
-            string[] guids = AssetDatabase.FindAssets(fileName);
-            if (guids.Length == 0)
+            var newMap = ScriptableObject.CreateInstance<HorizonResourceMap>();
+            newMap.searchFolders = new List<string>();
+
+            string[] guids = AssetDatabase.FindAssets("HorizonGUIManager");
+            if (guids.Length > 0)
             {
-                Debug.LogWarning($"[Horizon] Could not find default template '{fileName}' in package.");
-                return null;
+                string scriptPath = AssetDatabase.GUIDToAssetPath(guids[0]);
+
+                string coreFolder = Path.GetDirectoryName(scriptPath);
+                string runtimeFolder = Path.GetDirectoryName(coreFolder);
+
+                string texturesPath = Path.Combine(runtimeFolder, "Textures").Replace("\\", "/");
+                newMap.searchFolders.Add(texturesPath);
+
+                string rootFolder = Path.GetDirectoryName(runtimeFolder);
+                string templatesPath = Path.Combine(rootFolder, "Editor/Templates").Replace("\\", "/");
+
+                if (templatesPath != USER_TEMPLATES_PATH)
+                {
+                    newMap.searchFolders.Add(templatesPath);
+                }
             }
 
+            newMap.searchFolders.Add(USER_TEMPLATES_PATH);
+
+            AssetDatabase.CreateAsset(newMap, assetPath);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            return newMap;
+        }
+
+        private static TextAsset GetOrCopyAsset(string fileName, string extension)
+        {
+            string destPath = $"{USER_TEMPLATES_PATH}/{fileName}{extension}";
+
+            TextAsset existingInDest = AssetDatabase.LoadAssetAtPath<TextAsset>(destPath);
+            if (existingInDest != null) return existingInDest;
+
+            string[] guids = AssetDatabase.FindAssets(fileName);
+            if (guids.Length == 0) return null;
+
             string sourcePath = AssetDatabase.GUIDToAssetPath(guids[0]);
+
+            if (Path.GetFullPath(sourcePath) == Path.GetFullPath(destPath))
+            {
+                return AssetDatabase.LoadAssetAtPath<TextAsset>(sourcePath);
+            }
 
             if (AssetDatabase.CopyAsset(sourcePath, destPath))
             {

@@ -23,14 +23,14 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <param name="rootNode">The parsed HTML-like node tree.</param>
         /// <param name="styleSheet">The parsed CSS stylesheet.</param>
         /// <param name="logicTarget">The UdonSharpBehaviour that receives events and bindings.</param>
-        public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic)
+        public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic, HorizonResourceMap resourceMap)
         {
             while (rootContainer.transform.childCount > 0)
                 GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
 
             foreach (var child in rootNode.Children)
             {
-                BuildNode(child, rootContainer, styleSheet, rootLogic);
+                BuildNode(child, rootContainer, styleSheet, rootLogic, resourceMap);
             }
         }
 
@@ -39,7 +39,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// Propagates the <paramref name="contextLogic"/> down the hierarchy to bind events (`u-click`) and variables (`u-bind`).
         /// </summary>
         /// <param name="contextLogic">The current active UdonSharpBehaviour (Manager or Module) acting as the controller.</param>
-        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, UdonSharpBehaviour contextLogic)
+        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, UdonSharpBehaviour contextLogic, HorizonResourceMap resourceMap)
         {
             GameObject createdObj = null;
             var styles = styleSheet.GetComputedStyle(node);
@@ -83,7 +83,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 case "icon":
                 case "img":
-                    createdObj = BuildIcon(node, parent, styles);
+                    createdObj = BuildIcon(node, parent, styles, resourceMap);
                     break;
 
                 case "module":
@@ -110,7 +110,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 {
                     foreach (var child in node.Children)
                     {
-                        BuildNode(child, createdObj, styleSheet, nextContext);
+                        BuildNode(child, createdObj, styleSheet, nextContext, resourceMap);
                     }
                 }
 
@@ -459,7 +459,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <summary>
         /// Constructs an icon or image element.
         /// </summary>
-        private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles, HorizonResourceMap resourceMap)
         {
             GameObject go = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
             Image img = go.AddComponent<Image>();
@@ -468,8 +468,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (node.Attributes.TryGetValue("src", out string src))
             {
-                img.sprite = HorizonGUIFactory.LoadPackageSprite(src);
+                img.sprite = HorizonGUIFactory.LoadSprite(src, resourceMap);
+
                 if (img.sprite != null) img.color = Color.white;
+                else
+                {
+                    img.color = Color.magenta;
+                }
             }
 
             HorizonGUIFactory.SetLayoutSize(go, 32, 32, 32, 32);

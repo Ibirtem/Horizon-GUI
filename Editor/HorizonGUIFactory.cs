@@ -706,6 +706,80 @@ namespace BlackHorizon.HorizonGUI.Editor
         #endregion
 
         /// <summary>
+        /// Searches for a sprite asset based on the HTML 'src' attribute.
+        /// <para>
+        /// Search Priority:
+        /// 1. Explicit Overrides in ResourceMap (O(1)).
+        /// 2. Specific Search Folders in ResourceMap (Fast).
+        /// 3. Global Project Search (Slow, Fallback if Map is missing).
+        /// </para>
+        /// </summary>
+        /// <param name="filename">The filename (e.g. "icon.png" or just "icon"). Extension is optional but recommended for precision.</param>
+        /// <param name="map">The configuration asset defining search paths.</param>
+        /// <returns>The found Sprite, or null if not found.</returns>
+        public static Sprite LoadSprite(string filename, HorizonResourceMap map)
+        {
+            if (string.IsNullOrEmpty(filename)) return null;
+
+            if (map != null)
+            {
+                Sprite overrideSprite = map.GetOverride(filename);
+                if (overrideSprite != null) return overrideSprite;
+            }
+
+            string searchName = Path.GetFileNameWithoutExtension(filename);
+
+            string[] searchFolders = null;
+            if (map != null && map.searchFolders.Count > 0)
+            {
+                searchFolders = map.searchFolders.ToArray();
+            }
+
+            string[] guids = AssetDatabase.FindAssets(searchName, searchFolders);
+
+            if (guids.Length == 0)
+            {
+                Debug.LogWarning($"[HorizonGUI] Icon '{filename}' not found. Checked in: {(searchFolders != null ? string.Join(", ", searchFolders) : "Entire Project")}");
+                return null;
+            }
+
+            string bestPath = null;
+
+            foreach (var guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                string ext = Path.GetExtension(path).ToLower();
+
+                if (ext != ".png" && ext != ".jpg" && ext != ".psd" && ext != ".tga") continue;
+
+                if (Path.HasExtension(filename))
+                {
+                    if (path.EndsWith(filename, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        bestPath = path;
+                        break;
+                    }
+                }
+
+                if (bestPath == null) bestPath = path;
+            }
+
+            if (bestPath == null) return null;
+
+            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(bestPath);
+            if (sprite == null)
+            {
+                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(bestPath);
+                if (tex != null)
+                {
+                    sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
+                }
+            }
+
+            return sprite;
+        }
+
+        /// <summary>
         /// Dynamically locates a C# type by name and attaches it as an UdonSharp component.
         /// <para>
         /// <b>Search Strategy:</b><br/>

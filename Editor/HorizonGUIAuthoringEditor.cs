@@ -41,6 +41,21 @@ namespace BlackHorizon.HorizonGUI
             // 1. HEADER
             HorizonEditorUtils.DrawHorizonHeader("UI COMPILER", this);
 
+            // Draw Resource Map
+            SerializedProperty resMapProp = serializedObject.FindProperty("resourceMap");
+            EditorGUILayout.PropertyField(resMapProp);
+
+            if (resMapProp.objectReferenceValue == null)
+            {
+                GUI.backgroundColor = new Color(1f, 0.8f, 0.8f);
+                if (GUILayout.Button("Auto-Create Resource Map"))
+                {
+                    HorizonGUIBuilder.SetupDefaultTemplates(authoring);
+                    serializedObject.Update();
+                }
+                GUI.backgroundColor = Color.white;
+            }
+
             // 2. TEMPLATE SOURCE
             HorizonEditorUtils.DrawSectionHeader("TEMPLATE SOURCE");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
@@ -122,7 +137,7 @@ namespace BlackHorizon.HorizonGUI
 
             SetupVisualLayers(canvasObj, out GameObject contentRoot);
 
-            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.backingLogic);
+            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.backingLogic, authoring.resourceMap);
 
             FinalizeLayoutAndPhysics(canvasObj, rootRect);
 
