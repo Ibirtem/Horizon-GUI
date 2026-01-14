@@ -1,6 +1,5 @@
 using UnityEngine;
 using UnityEditor;
-using System.Collections.Generic;
 using BlackHorizon.HorizonGUI.Editor;
 
 namespace BlackHorizon.HorizonGUI
@@ -27,7 +26,6 @@ namespace BlackHorizon.HorizonGUI
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
-            HorizonGUIManager manager = (HorizonGUIManager)target;
 
             // 1. HEADER
             HorizonEditorUtils.DrawHorizonHeader("GUI MANAGER", this);
@@ -45,31 +43,7 @@ namespace BlackHorizon.HorizonGUI
             EditorGUILayout.PropertyField(_playerGridProp);
             GUI.enabled = true;
 
-            // 4. ACTIONS
-            HorizonEditorUtils.DrawSectionHeader("ACTIONS");
-            if (GUILayout.Button("Auto-Link Modules from Children"))
-            {
-                AutoLinkTabs(manager);
-            }
-
             serializedObject.ApplyModifiedProperties();
-        }
-
-        private void AutoLinkTabs(HorizonGUIManager manager)
-        {
-            var modulesList = new List<HorizonGUIModule>();
-            var foundModules = manager.GetComponentsInChildren<HorizonGUIModule>(true);
-
-            if (foundModules.Length > 0)
-            {
-                manager.modules = foundModules;
-                EditorUtility.SetDirty(manager);
-                Debug.Log($"[HorizonGUI] Auto-linked {foundModules.Length} modules found in hierarchy.");
-            }
-            else
-            {
-                Debug.LogWarning("[HorizonGUI] No HorizonGUIModule components found in children.");
-            }
         }
     }
 }
