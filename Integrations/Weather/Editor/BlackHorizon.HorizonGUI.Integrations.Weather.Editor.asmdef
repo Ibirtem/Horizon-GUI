@@ -1,0 +1,26 @@
+{
+    "name": "BlackHorizon.HorizonGUI.Integrations.Weather.Editor",
+    "rootNamespace": "BlackHorizon.HorizonGUI.Integrations.Weather.Editor",
+    "references": [
+        "BlackHorizon.HorizonGUI.Integrations.Weather",
+        "BlackHorizon.HorizonGUI.Runtime",
+        "BlackHorizon.HorizonGUI.Editor",
+        "BlackHorizon.HorizonWeatherTime.Runtime",
+        "UdonSharp.Runtime",
+        "UdonSharp.Editor",
+        "VRC.Udon",
+        "VRC.Udon.Editor",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

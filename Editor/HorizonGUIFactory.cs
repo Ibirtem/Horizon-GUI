@@ -804,28 +804,52 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// <returns>The attached behaviour, or a default HorizonGUIModule if not found.</returns>
         public static UdonSharpBehaviour AttachLogicByString(GameObject target, string typeName)
         {
-            System.Type type = System.Type.GetType(typeName);
+            System.Type targetType = System.Type.GetType(typeName);
 
-            if (type == null)
-                type = System.Type.GetType($"BlackHorizon.HorizonGUI.{typeName}, BlackHorizon.HorizonGUI.Runtime");
-
-            if (type == null)
+            // 1. Try legacy default namespace fallback
+            if (targetType == null)
             {
-                foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    type = asm.GetType(typeName);
-                    if (type == null) type = asm.GetType($"BlackHorizon.HorizonGUI.{typeName}");
-                    if (type != null) break;
-                }
+                targetType = System.Type.GetType($"BlackHorizon.HorizonGUI.{typeName}, BlackHorizon.HorizonGUI.Runtime");
             }
 
-            if (type == null)
+            // 2. Robust Lookup via TypeCache (Safe & Fast)
+            if (targetType == null)
             {
-                Debug.LogError($"<color=red>[HorizonFactory]</color> Could not find script type: '{typeName}'. Check spelling or namespace.");
+                var derivedTypes = TypeCache.GetTypesDerivedFrom<UdonSharpBehaviour>();
+
+                System.Type foundType = null;
+                bool duplicateFound = false;
+
+                foreach (var type in derivedTypes)
+                {
+                    if (type.Name == typeName)
+                    {
+                        if (foundType == null)
+                        {
+                            foundType = type;
+                        }
+                        else
+                        {
+                            duplicateFound = true;
+                            Debug.LogWarning($"<color=yellow>[HorizonFactory]</color> Ambiguity Warning: Multiple scripts named '<b>{typeName}</b>' found:\n" +
+                                             $"1. {foundType.FullName}\n" +
+                                             $"2. {type.FullName}\n" +
+                                             $"System is using the first one. Please specify namespace in HTML (u-script='Namespace.Class') to be precise.");
+                        }
+                    }
+                }
+
+                targetType = foundType;
+            }
+
+            if (targetType == null)
+            {
+                Debug.LogError($"<color=red>[HorizonFactory]</color> Could not find script type: '<b>{typeName}</b>'.\n" +
+                               $"If you moved the script to a new namespace, verify it compiles correctly.");
                 return AttachLogic<HorizonGUIModule>(target);
             }
 
-            return UdonSharpUndo.AddComponent(target, type) as UdonSharpBehaviour;
+            return UdonSharpUndo.AddComponent(target, targetType) as UdonSharpBehaviour;
         }
     }
 }

@@ -96,20 +96,27 @@ namespace BlackHorizon.HorizonGUI.Editor
             };
         }
 
-        private static string GetVersion(Object scriptReference)
+        /// <summary>
+        /// Retrieves the version by locating the main script and checking its package context.
+        /// Works for UPM (Registry/Local/Git) and raw Assets folders.
+        /// </summary>
+        public static string GetVersion(Object scriptReference)
         {
             string path = null;
 
-            if (scriptReference is ScriptableObject scriptableObj)
+            if (scriptReference is MonoBehaviour mono)
+            {
+                var monoScript = MonoScript.FromMonoBehaviour(mono);
+                path = AssetDatabase.GetAssetPath(monoScript);
+            }
+
+            else if (scriptReference is ScriptableObject scriptableObj)
             {
                 var monoScript = MonoScript.FromScriptableObject(scriptableObj);
                 path = AssetDatabase.GetAssetPath(monoScript);
             }
 
-            if (string.IsNullOrEmpty(path))
-            {
-                path = AssetDatabase.GetAssetPath(scriptReference);
-            }
+            if (string.IsNullOrEmpty(path)) path = AssetDatabase.GetAssetPath(scriptReference);
 
             if (string.IsNullOrEmpty(path)) return "Dev (No Path)";
 

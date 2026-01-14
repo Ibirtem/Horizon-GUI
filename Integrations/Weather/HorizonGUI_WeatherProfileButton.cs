@@ -8,7 +8,7 @@ using VRC.SDKBase;
 using VRC.Udon;
 #endif
 
-namespace BlackHorizon.HorizonGUI
+namespace BlackHorizon.HorizonGUI.Integrations.Weather
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
 #if UDONSHARP

@@ -1,9 +1,13 @@
 {
-    "name": "BlackHorizon.HorizonGUI.Runtime",
-    "rootNamespace": "BlackHorizon.HorizonGUI",
+    "name": "BlackHorizon.HorizonGUI.Integrations.Weather",
+    "rootNamespace": "BlackHorizon.HorizonGUI.Integrations.Weather",
     "references": [
+        "BlackHorizon.HorizonGUI.Runtime",
+        "BlackHorizon.HorizonWeatherTime.Runtime",
+        "BlackHorizon.HorizonWeatherTime.Data",
         "UdonSharp.Runtime",
         "VRC.Udon",
+        "VRC.SDKBase",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [],

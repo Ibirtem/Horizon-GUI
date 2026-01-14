@@ -17,9 +17,6 @@ namespace BlackHorizon.HorizonGUI
         private const float DEFAULT_CANVAS_WIDTH = 1000f;
         private const float DEFAULT_CANVAS_HEIGHT = 600f;
 
-        [System.Serializable]
-        private class LocalPackageJson { public string version; }
-
         private SerializedProperty _htmlFileProp;
         private SerializedProperty _cssFileProp;
         private SerializedProperty _backingLogicProp;
@@ -282,8 +279,7 @@ namespace BlackHorizon.HorizonGUI
         }
 
         /// <summary>
-        /// Automatically links generated modules and external systems (like Weather) to the HorizonGUIManager.
-        /// Also bakes static data (like version strings) directly into the UI text components.
+        /// Automatically links generated modules to the HorizonGUIManager.
         /// </summary>
         private void PerformLogicBinding(HorizonGUIAuthoring authoring, GameObject contentRoot)
         {
@@ -291,84 +287,12 @@ namespace BlackHorizon.HorizonGUI
             if (manager == null) return;
 
             var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
-
             var foundModules = contentRoot.GetComponentsInChildren<HorizonGUIModule>(true);
+
             if (foundModules.Length > 0)
                 binder.BindArray("modules", new System.Collections.Generic.List<HorizonGUIModule>(foundModules));
 
             binder.Apply();
-
-            var wModule = contentRoot.GetComponentInChildren<HorizonGUI_WeatherModule>(true);
-            if (wModule != null)
-            {
-                var wSys = Object.FindObjectOfType<BlackHorizon.HorizonWeatherTime.WeatherTimeSystem>();
-                if (wSys != null)
-                {
-                    var wBinder = new HorizonGUIFactory.HorizonLogicBinder(wModule);
-                    wBinder.Bind("weatherSystem", wSys);
-                    wBinder.Apply();
-
-                    if (wModule.weatherVersionText != null)
-                    {
-                        string ver = GetPackageVersion("com.blackhorizon.horizonweathertime");
-
-                        SerializedObject textSO = new SerializedObject(wModule.weatherVersionText);
-                        SerializedProperty textProp = textSO.FindProperty("m_text");
-                        if (textProp != null)
-                        {
-                            textProp.stringValue = $"v{ver}";
-                            textSO.ApplyModifiedProperties();
-                        }
-                    }
-                }
-            }
-        }
-
-        /// <summary>
-        /// Retrieves the version by locating the main script and checking its package context.
-        /// Works for UPM (Registry/Local/Git) and raw Assets folders.
-        /// </summary>
-        private string GetPackageVersion(string ignoredPackageName)
-        {
-            string[] guids = AssetDatabase.FindAssets("WeatherTimeSystem");
-
-            if (guids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guids[0]);
-
-                var upmInfo = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
-                if (upmInfo != null)
-                {
-                    return upmInfo.version;
-                }
-
-                try
-                {
-                    string absPath = System.IO.Path.GetFullPath(path);
-                    string directory = System.IO.Path.GetDirectoryName(absPath);
-
-                    for (int i = 0; i < 4; i++)
-                    {
-                        if (string.IsNullOrEmpty(directory)) break;
-
-                        string jsonPath = System.IO.Path.Combine(directory, "package.json");
-                        if (System.IO.File.Exists(jsonPath))
-                        {
-                            string json = System.IO.File.ReadAllText(jsonPath);
-                            var localPkg = JsonUtility.FromJson<LocalPackageJson>(json);
-                            if (localPkg != null && !string.IsNullOrEmpty(localPkg.version)) return localPkg.version;
-                        }
-
-                        directory = System.IO.Directory.GetParent(directory)?.FullName;
-                    }
-                }
-                catch (System.Exception ex)
-                {
-                    Debug.LogWarning($"[Horizon] Manual version search error: {ex.Message}");
-                }
-            }
-
-            return "?.?.?";
         }
     }
 }
