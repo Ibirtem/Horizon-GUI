@@ -388,15 +388,49 @@ namespace BlackHorizon.HorizonGUI.Editor
                 return true;
             }
 
-            public bool BindArray<TComp>(string propertyName, System.Collections.Generic.List<TComp> list) where TComp : UnityEngine.Object
+            public bool BindArray<T>(string propertyName, System.Collections.Generic.List<T> list)
             {
                 SerializedProperty prop = _so.FindProperty(propertyName);
                 if (prop == null) return false;
 
                 prop.ClearArray();
                 prop.arraySize = list.Count;
+
                 for (int i = 0; i < list.Count; i++)
-                    prop.GetArrayElementAtIndex(i).objectReferenceValue = list[i];
+                {
+                    SerializedProperty element = prop.GetArrayElementAtIndex(i);
+                    object value = list[i];
+
+                    if (typeof(UnityEngine.Object).IsAssignableFrom(typeof(T)))
+                    {
+                        element.objectReferenceValue = value as UnityEngine.Object;
+                    }
+                    else if (typeof(T) == typeof(string))
+                    {
+                        element.stringValue = value as string;
+                    }
+                    else if (typeof(T) == typeof(int))
+                    {
+                        element.intValue = (int)value;
+                    }
+                    else if (typeof(T) == typeof(float))
+                    {
+                        element.floatValue = (float)value;
+                    }
+                    else if (typeof(T) == typeof(bool))
+                    {
+                        element.boolValue = (bool)value;
+                    }
+                    else if (typeof(T) == typeof(Color))
+                    {
+                        element.colorValue = (Color)value;
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[HorizonLogicBinder] Unsupported array element type: {typeof(T).Name} for property '{propertyName}'");
+                        return false;
+                    }
+                }
 
                 return true;
             }

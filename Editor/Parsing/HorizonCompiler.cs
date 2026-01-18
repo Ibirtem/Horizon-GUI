@@ -18,6 +18,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
     {
         public static int ValidationErrors { get; private set; }
 
+        private class ChannelData
+        {
+            public List<GameObject> Views = new List<GameObject>();
+            public List<string> ViewIds = new List<string>();
+            public List<Button> Buttons = new List<Button>();
+            public List<string> ButtonTargets = new List<string>();
+        }
+
+        // Временное хранилище каналов во время одной сборки
+        private static Dictionary<string, ChannelData> _activeChannels;
+
         /// <summary>
         /// Clears the existing UI and rebuilds the interface from the provided node tree.
         /// </summary>
@@ -28,6 +39,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic, HorizonResourceMap resourceMap)
         {
             ValidationErrors = 0;
+            _activeChannels = new Dictionary<string, ChannelData>();
 
             while (rootContainer.transform.childCount > 0)
                 GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
@@ -36,6 +48,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             {
                 BuildNode(child, rootContainer, styleSheet, rootLogic, resourceMap);
             }
+
+            BuildChannelControllers(rootContainer);
+            _activeChannels.Clear();
         }
 
         /// <summary>
@@ -52,13 +67,10 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             if (node.Attributes.TryGetValue("style", out string inlineStyle))
             {
                 var overrides = ParseInlineStyle(inlineStyle);
-                foreach (var kvp in overrides)
-                {
-                    styles[kvp.Key] = kvp.Value;
-                }
+                foreach (var kvp in overrides) styles[kvp.Key] = kvp.Value;
             }
-            string tag = node.Tag.ToLower();
 
+            string tag = node.Tag.ToLower();
             UdonSharpBehaviour nextContext = contextLogic;
 
             switch (tag)
@@ -120,6 +132,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             {
                 ProcessLogic(createdObj, node, nextContext);
 
+                RegisterChannels(createdObj, node);
+
                 if (tag != "h-grid")
                 {
                     foreach (var child in node.Children)
@@ -135,6 +149,146 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     rt.anchoredPosition3D = pos;
                     rt.localRotation = Quaternion.identity;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Analyzes h-change and h-view attributes to populate the channel dictionary.
+        /// </summary>
+        private static void RegisterChannels(GameObject obj, HorizonNode node)
+        {
+            // 1. Register View (h-view="Channel:PageID")
+            if (node.Attributes.TryGetValue("h-view", out string viewRaw))
+            {
+                ParseChannelString(viewRaw, out string channel, out string id);
+                if (!string.IsNullOrEmpty(channel) && !string.IsNullOrEmpty(id))
+                {
+                    if (!_activeChannels.ContainsKey(channel)) _activeChannels[channel] = new ChannelData();
+
+                    _activeChannels[channel].Views.Add(obj);
+                    _activeChannels[channel].ViewIds.Add(id);
+                }
+            }
+
+            // 2. Register Trigger (h-change="Channel:TargetID")
+            if (node.Attributes.TryGetValue("h-change", out string changeRaw))
+            {
+                Button btn = obj.GetComponent<Button>();
+                if (btn != null)
+                {
+                    ParseChannelString(changeRaw, out string channel, out string id);
+                    if (!string.IsNullOrEmpty(channel) && !string.IsNullOrEmpty(id))
+                    {
+                        if (!_activeChannels.ContainsKey(channel)) _activeChannels[channel] = new ChannelData();
+
+                        _activeChannels[channel].Buttons.Add(btn);
+                        _activeChannels[channel].ButtonTargets.Add(id);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Finalizes the build process by creating Logic Controllers for all detected channels.
+        /// <para>
+        /// For every unique channel found (e.g. "Main"), a hidden GameObject with <see cref="HorizonChannelController"/> is created.
+        /// Buttons with 'h-change' are linked to this controller using <see cref="HorizonEventCaller"/> to ensure Udon compatibility.
+        /// </para>
+        /// </summary>
+        private static void BuildChannelControllers(GameObject rootContainer)
+        {
+            if (_activeChannels.Count == 0) return;
+
+            GameObject systemRoot = HorizonGUIFactory.CreateBlock("_System_Channels", rootContainer);
+            systemRoot.SetActive(false);
+
+            foreach (var kvp in _activeChannels)
+            {
+                string channelName = kvp.Key;
+                ChannelData data = kvp.Value;
+
+                if (data.Views.Count == 0)
+                {
+                    if (data.Buttons.Count > 0)
+                    {
+                        Debug.LogWarning($"<color=yellow>[HorizonCompiler]</color> Channel <b>'{channelName}'</b> has {data.Buttons.Count} triggers (h-change) but no views (h-view). Buttons will not function.");
+                    }
+                    continue;
+                }
+
+                // 1. Create Controller Host
+                GameObject host = new GameObject($"Channel_{channelName}");
+                host.transform.SetParent(systemRoot.transform);
+
+                var controller = HorizonGUIFactory.AttachLogic<HorizonChannelController>(host);
+
+                HorizonGUIFactory.ConfigureLogic<HorizonChannelController>(host, binder =>
+                {
+                    binder.BindVal("channelName", channelName);
+                    binder.BindArray("views", data.Views);
+                    binder.BindArray("viewIds", data.ViewIds);
+                });
+
+                for (int i = 0; i < data.Views.Count; i++)
+                {
+                    if (data.Views[i] != null)
+                        data.Views[i].SetActive(i == 0);
+                }
+
+                // 2. Link Buttons via HorizonEventCaller
+                UdonBehaviour backingController = UdonSharpEditorUtility.GetBackingUdonBehaviour(controller);
+
+                if (backingController == null)
+                {
+                    Debug.LogError($"<color=red>[HorizonCompiler]</color> Critical: Failed to get backing UdonBehaviour for channel '{channelName}'. Check UdonSharp compilation status.");
+                    continue;
+                }
+
+                for (int i = 0; i < data.Buttons.Count; i++)
+                {
+                    Button btn = data.Buttons[i];
+                    string targetId = data.ButtonTargets[i];
+
+                    int count = btn.onClick.GetPersistentEventCount();
+                    for (int k = count - 1; k >= 0; k--) UnityEventTools.RemovePersistentListener(btn.onClick, k);
+
+                    GameObject btnObj = btn.gameObject;
+                    var caller = HorizonGUIFactory.AttachLogic<HorizonEventCaller>(btnObj);
+
+                    HorizonGUIFactory.ConfigureLogic<HorizonEventCaller>(btnObj, binder =>
+                    {
+                        binder.Bind("targetBehaviour", backingController);
+                        binder.BindVal("eventName", "_SwitchFromEvent");
+                        binder.BindVal("stringPayload", targetId);
+                    });
+
+                    UdonBehaviour callerBacking = UdonSharpEditorUtility.GetBackingUdonBehaviour(caller);
+
+                    if (callerBacking != null)
+                    {
+                        UnityEventTools.AddStringPersistentListener(
+                            btn.onClick,
+                            callerBacking.SendCustomEvent,
+                            "OnClick"
+                        );
+                    }
+                }
+            }
+        }
+
+        private static void ParseChannelString(string raw, out string channel, out string id)
+        {
+            channel = "";
+            id = "";
+            string[] parts = raw.Split(':');
+            if (parts.Length == 2)
+            {
+                channel = parts[0].Trim();
+                id = parts[1].Trim();
+            }
+            else
+            {
+                Debug.LogWarning($"[HorizonCompiler] Invalid channel format: '{raw}'. Expected 'ChannelName:Value'");
             }
         }
 
