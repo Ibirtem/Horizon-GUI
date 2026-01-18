@@ -27,21 +27,11 @@ namespace BlackHorizon.HorizonGUI
 
         private void Update()
         {
-            if (githubField != null)
-            {
-                if (githubField.text != githubUrl)
-                {
-                    githubField.text = githubUrl;
-                }
-            }
+            if (githubField != null && githubField.text != githubUrl)
+                githubField.text = githubUrl;
 
-            if (linkField != null)
-            {
-                if (linkField.text != boostyUrl)
-                {
-                    linkField.text = boostyUrl;
-                }
-            }
+            if (linkField != null && linkField.text != boostyUrl)
+                linkField.text = boostyUrl;
         }
 
         public void ResetText()
@@ -50,10 +40,10 @@ namespace BlackHorizon.HorizonGUI
             if (linkField != null) linkField.text = boostyUrl;
         }
 
-        public void OpenTestModal()
+        public void ToggleTestModal()
         {
             var mgr = GetComponentInParent<HorizonGUIManager>();
-            if (mgr != null)
+            if (mgr != null && mgr.overlayContainer != null)
             {
                 bool state = mgr.overlayContainer.activeSelf;
                 mgr.ToggleOverlay(!state);

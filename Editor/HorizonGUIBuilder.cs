@@ -15,9 +15,10 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         private const string DEFAULT_LAYOUT_NAME = "Horizon_Default_Layout";
         private const string DEFAULT_THEME_NAME = "Horizon_Default_Theme";
-
-        private const string USER_TEMPLATES_PATH = "Assets/Horizon GUI";
         private const string DEFAULT_RESOURCES_NAME = "Horizon_Default_Resources";
+
+        private const string DASHBOARD_ROOT = "Assets/Horizon GUI/Horizon-Dashboard";
+        private const string DASHBOARD_EDITOR_PATH = "Assets/Horizon GUI/Horizon-Dashboard/Editor";
 
         [MenuItem("GameObject/Horizon/Create UI System", false, 10)]
         public static void CreateNewSystem(MenuCommand menuCommand)
@@ -58,19 +59,38 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         private static void EnsureTemplateDirectoryExists()
         {
-            if (!Directory.Exists(USER_TEMPLATES_PATH))
+            bool created = false;
+
+            if (!Directory.Exists(DASHBOARD_ROOT))
             {
-                Directory.CreateDirectory(USER_TEMPLATES_PATH);
+                Directory.CreateDirectory(DASHBOARD_ROOT);
+                created = true;
+            }
+
+            if (!Directory.Exists(DASHBOARD_EDITOR_PATH))
+            {
+                Directory.CreateDirectory(DASHBOARD_EDITOR_PATH);
+                created = true;
+            }
+
+            if (created)
+            {
                 AssetDatabase.Refresh();
             }
         }
 
         private static HorizonResourceMap GetOrCreateDefaultResourceMap()
         {
-            string assetPath = $"{USER_TEMPLATES_PATH}/{DEFAULT_RESOURCES_NAME}.asset";
+            string assetPath = $"{DASHBOARD_EDITOR_PATH}/{DEFAULT_RESOURCES_NAME}.asset";
 
             var existing = AssetDatabase.LoadAssetAtPath<HorizonResourceMap>(assetPath);
             if (existing != null) return existing;
+
+            if (!Directory.Exists(DASHBOARD_EDITOR_PATH))
+            {
+                Debug.LogError($"[Horizon] Critical Error: Target directory does not exist: {DASHBOARD_EDITOR_PATH}");
+                return null;
+            }
 
             var newMap = ScriptableObject.CreateInstance<HorizonResourceMap>();
             newMap.searchFolders = new List<string>();
@@ -79,23 +99,18 @@ namespace BlackHorizon.HorizonGUI.Editor
             if (guids.Length > 0)
             {
                 string scriptPath = AssetDatabase.GUIDToAssetPath(guids[0]);
-
-                string coreFolder = Path.GetDirectoryName(scriptPath);
-                string runtimeFolder = Path.GetDirectoryName(coreFolder);
+                string coreRuntimeFolder = Path.GetDirectoryName(scriptPath);
+                string runtimeFolder = Path.GetDirectoryName(coreRuntimeFolder);
+                string coreFolder = Path.GetDirectoryName(runtimeFolder);
 
                 string texturesPath = Path.Combine(runtimeFolder, "Textures").Replace("\\", "/");
                 newMap.searchFolders.Add(texturesPath);
-
-                string rootFolder = Path.GetDirectoryName(runtimeFolder);
-                string templatesPath = Path.Combine(rootFolder, "Editor/Templates").Replace("\\", "/");
-
-                if (templatesPath != USER_TEMPLATES_PATH)
-                {
-                    newMap.searchFolders.Add(templatesPath);
-                }
             }
 
-            newMap.searchFolders.Add(USER_TEMPLATES_PATH);
+            newMap.searchFolders.Add(DASHBOARD_EDITOR_PATH);
+
+            string resPath = DASHBOARD_ROOT + "/Resources";
+            if (Directory.Exists(resPath)) newMap.searchFolders.Add(resPath);
 
             AssetDatabase.CreateAsset(newMap, assetPath);
             AssetDatabase.SaveAssets();
@@ -106,7 +121,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         private static TextAsset GetOrCopyAsset(string fileName, string extension)
         {
-            string destPath = $"{USER_TEMPLATES_PATH}/{fileName}{extension}";
+            string destPath = $"{DASHBOARD_EDITOR_PATH}/{fileName}{extension}";
 
             TextAsset existingInDest = AssetDatabase.LoadAssetAtPath<TextAsset>(destPath);
             if (existingInDest != null) return existingInDest;
@@ -116,18 +131,13 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             string sourcePath = AssetDatabase.GUIDToAssetPath(guids[0]);
 
-            if (Path.GetFullPath(sourcePath) == Path.GetFullPath(destPath))
-            {
-                return AssetDatabase.LoadAssetAtPath<TextAsset>(sourcePath);
-            }
-
             if (AssetDatabase.CopyAsset(sourcePath, destPath))
             {
                 AssetDatabase.Refresh();
                 return AssetDatabase.LoadAssetAtPath<TextAsset>(destPath);
             }
 
-            return null;
+            return AssetDatabase.LoadAssetAtPath<TextAsset>(sourcePath);
         }
     }
 }

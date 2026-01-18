@@ -1,5 +1,4 @@
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 
 #if UDONSHARP
@@ -11,9 +10,9 @@ using VRC.Udon;
 namespace BlackHorizon.HorizonGUI
 {
     /// <summary>
-    /// Central controller for the Horizon UI System.
-    /// Handles navigation between modules, global overlays, and core system logic (Clock, Weather, Player Grid).
-    /// UI references are automatically populated by the HorizonCompiler via 'u-bind' attributes.
+    /// The core controller for the Horizon UI System.
+    /// Manages high-level state: active modules, tabs, and global overlays.
+    /// Content-specific logic (like Player Grids) should be handled by individual modules.
     /// </summary>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class HorizonGUIManager : UdonSharpBehaviour
@@ -25,56 +24,36 @@ namespace BlackHorizon.HorizonGUI
         [Tooltip("Global modal/overlay container.")]
         public GameObject overlayContainer;
 
-        [Header("Binding Targets (Auto-populated)")]
+        [Header("Global Bindings")]
+        [Tooltip("Optional: Global clock text usually placed in the header.")]
         public TextMeshProUGUI clockText;
-        public TextMeshProUGUI instanceInfoText;
-        public HorizonDataGrid playerGrid;
 
         private int _currentTabIndex = 0;
 
         /// <summary>
-        /// Property used by HorizonDataGrid to pass the selected item ID back to the manager.
+        /// Shared integer variable for inter-module communication (e.g., passing IDs).
         /// </summary>
         [System.NonSerialized] public int _lastEventInt;
 
         private void Start()
         {
-            InitializeUI();
             OpenTab(0);
         }
 
         private void Update()
         {
-            UpdateSystemClock();
-
-            if (Time.frameCount % 120 == 0) UpdatePlayerList();
-        }
-
-        #region System Initialization
-
-        private void InitializeUI()
-        {
-            UpdatePlayerList();
-        }
-
-        private void UpdateSystemClock()
-        {
             if (clockText != null)
+            {
                 clockText.text = System.DateTime.Now.ToString("dd MMMM, HH:mm");
+            }
         }
-
-        #endregion
 
         #region Navigation Logic
 
-        public void OnNavHome() => OpenTab(0);
-        public void OnNavWeather() => OpenTab(1);
-        public void OnNavAbout() => OpenTab(2);
-
         /// <summary>
-        /// Switches the active module and updates navigation button visuals.
+        /// Switches the active module and updates its visibility.
         /// </summary>
-        /// <param name="index">The index of the module to display.</param>
+        /// <param name="index">The index of the module in the 'modules' array.</param>
         public void OpenTab(int index)
         {
             if (modules == null || index < 0 || index >= modules.Length) return;
@@ -83,59 +62,23 @@ namespace BlackHorizon.HorizonGUI
 
             for (int i = 0; i < modules.Length; i++)
             {
-                if (modules[i] != null) modules[i].gameObject.SetActive(i == index);
-            }
-
-            if (index == 0) UpdatePlayerList();
-        }
-
-        #endregion
-
-        #region Module: Home (Player Grid)
-
-        /// <summary>
-        /// Fetches the current player list. 
-        /// Populates names in the data array for internal grid logic, 
-        /// even if the current visual style (Circle) hides them.
-        /// </summary>
-        public void UpdatePlayerList()
-        {
-            int playerCount = 0;
-#if UDONSHARP
-            playerCount = VRCPlayerApi.GetPlayerCount();
-#else
-            playerCount = 1;
-#endif
-
-            if (instanceInfoText != null) instanceInfoText.text = $"Instance Players: {playerCount}";
-
-            if (playerGrid != null)
-            {
-#if UDONSHARP
-                VRCPlayerApi[] players = new VRCPlayerApi[playerCount];
-                VRCPlayerApi.GetPlayers(players);
-
-                int[] ids = new int[playerCount];
-                string[] names = new string[playerCount];
-                for (int i = 0; i < playerCount; i++)
+                if (modules[i] != null)
                 {
-                    if (Utilities.IsValid(players[i]))
-                    {
-                        ids[i] = players[i].playerId;
-                        names[i] = players[i].displayName;
-                    }
+                    bool isActive = (i == index);
+
+                    if (isActive) modules[i].OnShow();
+                    else modules[i].OnHide();
+
+                    modules[i].gameObject.SetActive(isActive);
                 }
-                playerGrid.LoadData(ids, names, null); 
-#else
-                playerGrid.LoadData(new int[] { 1 }, new string[] { "Editor" }, null);
-#endif
             }
         }
 
-        public void OnPlayerSlotClicked()
-        {
-            Debug.Log($"[Horizon] Selected Player ID: {_lastEventInt}");
-        }
+        // --- LEGACY NAVIGATION SUPPORT ---
+        // TODO: Replace with generic u-arg event system in the future updates.
+        public void OnNavHome() => OpenTab(0);
+        public void OnNavWeather() => OpenTab(1);
+        public void OnNavAbout() => OpenTab(2);
 
         #endregion
 

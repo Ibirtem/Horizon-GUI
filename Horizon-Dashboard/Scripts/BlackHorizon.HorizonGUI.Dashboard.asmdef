@@ -1,0 +1,20 @@
+{
+    "name": "BlackHorizon.HorizonGUI.Dashboard",
+    "rootNamespace": "BlackHorizon.HorizonGUI",
+    "references": [
+        "BlackHorizon.HorizonGUI.Runtime",
+        "BlackHorizon.HorizonWeatherTime.Runtime",
+        "UdonSharp.Runtime",
+        "VRC.Udon",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

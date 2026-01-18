@@ -10,17 +10,12 @@ namespace BlackHorizon.HorizonGUI
         private SerializedProperty _modulesProp;
         private SerializedProperty _overlayContainerProp;
         private SerializedProperty _clockTextProp;
-        private SerializedProperty _instanceInfoTextProp;
-        private SerializedProperty _playerGridProp;
 
         private void OnEnable()
         {
             _modulesProp = serializedObject.FindProperty("modules");
             _overlayContainerProp = serializedObject.FindProperty("overlayContainer");
-
             _clockTextProp = serializedObject.FindProperty("clockText");
-            _instanceInfoTextProp = serializedObject.FindProperty("instanceInfoText");
-            _playerGridProp = serializedObject.FindProperty("playerGrid");
         }
 
         public override void OnInspectorGUI()
@@ -28,7 +23,7 @@ namespace BlackHorizon.HorizonGUI
             serializedObject.Update();
 
             // 1. HEADER
-            HorizonEditorUtils.DrawHorizonHeader("GUI MANAGER", this);
+            HorizonEditorUtils.DrawHorizonHeader("GUI MANAGER", target);
 
             // 2. SYSTEM REFERENCES
             HorizonEditorUtils.DrawSectionHeader("SYSTEM REFERENCES");
@@ -39,8 +34,6 @@ namespace BlackHorizon.HorizonGUI
             HorizonEditorUtils.DrawSectionHeader("BINDING TARGETS");
             GUI.enabled = false;
             EditorGUILayout.PropertyField(_clockTextProp);
-            EditorGUILayout.PropertyField(_instanceInfoTextProp);
-            EditorGUILayout.PropertyField(_playerGridProp);
             GUI.enabled = true;
 
             serializedObject.ApplyModifiedProperties();

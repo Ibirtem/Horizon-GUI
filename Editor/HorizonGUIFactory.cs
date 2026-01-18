@@ -17,7 +17,7 @@ namespace BlackHorizon.HorizonGUI.Editor
     /// </summary>
     public static class HorizonGUIFactory
     {
-        private const string GENERATED_SPRITE_PATH = "Assets/Horizon GUI/Textures/Horizon_RoundedBackground.png";
+        private const string GENERATED_SPRITE_PATH = "Assets/Horizon GUI/Core/Runtime/Textures/Horizon_RoundedBackground.png";
 
         #region Default Theme Constants
 
@@ -176,15 +176,29 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// </summary>
         public static Material GetGlassMaterial()
         {
-            string matPath = "Assets/Horizon GUI/Materials/HorizonGlass.mat";
+            string folderPath = "Assets/Horizon GUI/Core/Runtime/Materials";
+            string matPath = $"{folderPath}/HorizonGlass.mat";
+
+            if (!Directory.Exists(folderPath))
+            {
+                Directory.CreateDirectory(folderPath);
+                AssetDatabase.Refresh();
+            }
+
             Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
             if (mat == null)
             {
                 Shader shader = Shader.Find("Horizon/UI/Glass Blur");
-                if (shader == null) return null;
+                if (shader == null)
+                {
+                    Debug.LogError("[HorizonFactory] Shader 'Horizon/UI/Glass Blur' not found. Ensure Shaders folder is imported correctly.");
+                    return null;
+                }
+
                 mat = new Material(shader);
                 mat.SetFloat("_BlurSize", 8.0f);
                 mat.SetColor("_Color", new Color(0.9f, 0.95f, 1.0f, 0.3f));
+
                 AssetDatabase.CreateAsset(mat, matPath);
             }
             return mat;
