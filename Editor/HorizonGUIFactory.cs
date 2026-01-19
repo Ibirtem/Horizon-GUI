@@ -843,8 +843,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// <para>
         /// <b>Search Strategy:</b><br/>
         /// 1. Direct Type.GetType (for fully qualified names).<br/>
-        /// 2. Default Namespace ("BlackHorizon.HorizonGUI").<br/>
-        /// 3. Full AppDomain assembly scan (slow fallback for Editor safety).
+        /// 2. Robust Lookup via TypeCache.
         /// </para>
         /// </summary>
         /// <param name="target">The GameObject to attach the script to.</param>
@@ -854,13 +853,6 @@ namespace BlackHorizon.HorizonGUI.Editor
         {
             System.Type targetType = System.Type.GetType(typeName);
 
-            // 1. Try legacy default namespace fallback
-            if (targetType == null)
-            {
-                targetType = System.Type.GetType($"BlackHorizon.HorizonGUI.{typeName}, BlackHorizon.HorizonGUI.Runtime");
-            }
-
-            // 2. Robust Lookup via TypeCache (Safe & Fast)
             if (targetType == null)
             {
                 var derivedTypes = TypeCache.GetTypesDerivedFrom<UdonSharpBehaviour>();

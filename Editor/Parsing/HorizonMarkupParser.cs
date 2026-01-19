@@ -94,23 +94,5 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             return root;
         }
-
-        /// <summary>
-        /// Recursive debug printer
-        /// </summary>
-        public static void LogTree(HorizonNode node, int depth = 0)
-        {
-            string indent = new string('-', depth * 2);
-            string attrs = "";
-            foreach (var kvp in node.Attributes) attrs += $" [{kvp.Key}={kvp.Value}]";
-            string text = string.IsNullOrEmpty(node.TextContent) ? "" : $" Text: '{node.TextContent}'";
-
-            Debug.Log($"{indent} <{node.Tag}>{attrs}{text}");
-
-            foreach (var child in node.Children)
-            {
-                LogTree(child, depth + 1);
-            }
-        }
     }
 }

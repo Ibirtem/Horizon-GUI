@@ -27,7 +27,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         {
             public GameObject SourceObj;
             public string MethodName;
-            public string TagType;
         }
         private static List<PendingEvent> _pendingEvents;
 
@@ -172,8 +171,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     _pendingEvents.Add(new PendingEvent
                     {
                         SourceObj = createdObj,
-                        MethodName = methodName,
-                        TagType = tag
+                        MethodName = methodName
                     });
                 }
 

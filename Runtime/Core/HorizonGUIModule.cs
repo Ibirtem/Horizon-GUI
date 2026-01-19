@@ -17,10 +17,7 @@ namespace BlackHorizon.HorizonGUI
 #endif
     {
         [Header("Module Settings")]
-        public string moduleTitle = "New Tab";
-        public Sprite moduleIcon;
-
-        [Tooltip("If true, this module will be hidden from the navigation bar.")]
+        [Tooltip("If true, this module will be hidden from logic iterations if necessary.")]
         public bool isHidden = false;
 
         public virtual void OnShow()

@@ -75,11 +75,6 @@ namespace BlackHorizon.HorizonGUI
             }
         }
 
-        // --- LEGACY NAVIGATION SUPPORT ---
-        public void OnNavHome() => OpenTab(0);
-        public void OnNavWeather() => OpenTab(1);
-        public void OnNavAbout() => OpenTab(2);
-
         #endregion
 
         #region Global Overlays
