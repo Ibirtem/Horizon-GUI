@@ -62,7 +62,7 @@ MonoBehaviour:
       Data: 3|System.RuntimeType, mscorlib
     - Name: 
       Entry: 1
-      Data: BlackHorizon.HorizonGUI.HorizonGUIModule[], BlackHorizon.HorizonGUI.Runtime
+      Data: UdonSharp.UdonSharpBehaviour[], UdonSharp.Runtime
     - Name: 
       Entry: 8
       Data: 
@@ -107,7 +107,7 @@ MonoBehaviour:
       Data: 7|UnityEngine.TooltipAttribute, UnityEngine.CoreModule
     - Name: tooltip
       Entry: 1
-      Data: List of all top-level modules. Managed by the compiler.
+      Data: List of all logic scripts discovered and bound by the compiler.
     - Name: 
       Entry: 8
       Data: 

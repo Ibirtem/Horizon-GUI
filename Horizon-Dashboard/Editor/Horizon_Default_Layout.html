@@ -33,30 +33,28 @@
 
         <!-- MODULES STACK -->
         <div class="modules-stack">
-
-            <!-- HOME -->
-            <module id="Module_Home" class="module-page" u-script="HorizonGUI_HomeModule" h-view="Main:Home">
-                <text class="dim-text" u-bind="instanceInfoText">Loading...</text>
+            <div class="module-page" h-view="Main:Home" u-bind="Home_View">
+                <text class="dim-text" u-bind="Home_InfoText">Loading...</text>
                 <hr />
                 <h-grid id="PlayerGrid" style="circle" pool="64" cell-w="64" cell-h="64" spacing="15"
-                    u-bind="playerGrid" u-click="OnPlayerSlotClicked"></h-grid>
-            </module>
+                    u-bind="Home_PlayerGrid" u-click="OnPlayerSlotClicked"></h-grid>
+            </div>
 
-            <!-- WEATHER -->
-            <module id="Module_Weather" class="module-page" u-script="HorizonGUI_WeatherModule" h-view="Main:Weather">
+            <!-- WEATHER MODULE -->
+            <div class="module-page" h-view="Main:Weather" u-bind="Weather_View">
                 <scroll class="scroll-view">
                     <div class="row status-row">
-                        <text u-bind="weatherStatusText" class="dim-text">Status: Checking...</text>
+                        <text u-bind="Weather_StatusText" class="dim-text">Status: Checking...</text>
                         <text class="dim-text">|</text>
-                        <text class="dim-text" u-bind="weatherVersionText">v?.?.?</text>
+                        <text class="dim-text" u-bind="Weather_VersionText">v?.?.?</text>
                     </div>
                     <hr />
 
                     <div class="weather-controls">
-                        <toggle u-bind="realTimeToggle" u-click="OnRealTimeChanged">Use Real-Time Sync</toggle>
+                        <toggle u-bind="Weather_RealTimeToggle" u-click="OnRealTimeChanged">Use Real-Time Sync</toggle>
 
                         <label>Time of Day</label>
-                        <input type="range" min="0" max="1" value="0.25" u-bind="timeSlider"
+                        <input type="range" min="0" max="1" value="0.25" u-bind="Weather_TimeSlider"
                             u-click="OnTimeSliderChanged" />
 
                         <hr />
@@ -74,10 +72,10 @@
                         </div>
                     </div>
                 </scroll>
-            </module>
+            </div>
 
-            <!-- ABOUT -->
-            <module id="Module_About" class="module-page" h-view="Main:About">
+            <!-- ABOUT MODULE -->
+            <div class="module-page" h-view="Main:About" u-bind="About_View">
                 <text class="dim-text">Version: 0.1.0</text>
                 <text class="dim-text">Author: Ibirtem</text>
                 <hr />
@@ -85,14 +83,15 @@
                 <div class="links-container">
                     <div class="link-row">
                         <icon src="icon_github.png" />
-                        <input type="text" value="https://github.com/Ibirtem/Horizon-GUI" />
+                        <input type="text" value="https://github.com/Ibirtem/Horizon-GUI" u-bind="About_GithubField" />
                     </div>
                     <div class="link-row">
                         <icon src="icon_boosty.png" />
-                        <input type="text" value="https://boosty.to/ibirtem" />
+                        <input type="text" value="https://boosty.to/ibirtem" u-bind="About_BoostyField" />
                     </div>
                 </div>
-            </module>
+            </div>
+
         </div>
     </div>
 

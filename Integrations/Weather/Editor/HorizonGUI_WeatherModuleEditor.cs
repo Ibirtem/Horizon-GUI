@@ -18,10 +18,14 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
             base.OnInspectorGUI();
         }
 
+        /// <summary>
+        /// Automatically links dependencies and bakes system version info into UI labels.
+        /// </summary>
         private void PerformAutoSetup(HorizonGUI_WeatherModule module)
         {
             bool isDirty = false;
 
+            // 1. Auto-Link System
             if (module.weatherSystem == null)
             {
                 var found = Object.FindObjectOfType<WeatherTimeSystem>(true);
@@ -33,14 +37,16 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
                 }
             }
 
-            if (module.weatherSystem != null && module.weatherVersionText != null)
+            // 2. Bake Version into Cached Variable
+            if (module.weatherSystem != null)
             {
                 string version = HorizonEditorUtils.GetVersion(module.weatherSystem);
                 string versionStr = $"v{version}";
-                if (module.weatherVersionText.text != versionStr)
+
+                if (module.cachedVersion != versionStr)
                 {
-                    Undo.RecordObject(module.weatherVersionText, "Bake Version");
-                    module.weatherVersionText.text = versionStr;
+                    Undo.RecordObject(module, "Bake Version Cache");
+                    module.cachedVersion = versionStr;
                     isDirty = true;
                 }
             }
@@ -49,6 +55,12 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
             {
                 EditorUtility.SetDirty(module);
                 module.UpdateStatusVisuals();
+            }
+
+            if (module.Weather_VersionText != null && module.Weather_VersionText.text != module.cachedVersion)
+            {
+                Undo.RecordObject(module.Weather_VersionText, "Update Version Text");
+                module.Weather_VersionText.text = module.cachedVersion;
             }
         }
     }

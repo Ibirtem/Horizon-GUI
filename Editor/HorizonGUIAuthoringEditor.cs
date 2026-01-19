@@ -3,6 +3,8 @@ using UnityEditor;
 using UnityEngine.UI;
 using BlackHorizon.HorizonGUI.Editor;
 using BlackHorizon.HorizonGUI.Editor.Parsing;
+using UdonSharp;
+using System.Collections.Generic;
 
 namespace BlackHorizon.HorizonGUI
 {
@@ -30,6 +32,10 @@ namespace BlackHorizon.HorizonGUI
             _clearOnBuildProp = serializedObject.FindProperty("clearOnBuild");
         }
 
+        /// <summary>
+        /// Renders the custom inspector. 
+        /// Provides a simplified interface for template management and logic initialization.
+        /// </summary>
         public override void OnInspectorGUI()
         {
             serializedObject.Update();
@@ -38,10 +44,9 @@ namespace BlackHorizon.HorizonGUI
             // 1. HEADER
             HorizonEditorUtils.DrawHorizonHeader("UI COMPILER", this);
 
-            // Draw Resource Map
+            // 2. RESOURCE MAP
             SerializedProperty resMapProp = serializedObject.FindProperty("resourceMap");
             EditorGUILayout.PropertyField(resMapProp);
-
             if (resMapProp.objectReferenceValue == null)
             {
                 GUI.backgroundColor = new Color(1f, 0.8f, 0.8f);
@@ -53,44 +58,47 @@ namespace BlackHorizon.HorizonGUI
                 GUI.backgroundColor = Color.white;
             }
 
-            // 2. TEMPLATE SOURCE
+            // 3. TEMPLATE SOURCE
             HorizonEditorUtils.DrawSectionHeader("TEMPLATE SOURCE");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-
             EditorGUILayout.PropertyField(_htmlFileProp, new GUIContent("HTML Layout"));
             EditorGUILayout.PropertyField(_cssFileProp, new GUIContent("CSS Styles"));
+            EditorGUILayout.EndVertical();
 
-            EditorGUILayout.BeginHorizontal();
-            GUILayout.FlexibleSpace();
-            if (GUILayout.Button("Load Defaults", GUILayout.Width(100)))
+            // 4. LOGIC & BINDING
+            HorizonEditorUtils.DrawSectionHeader("LOGIC & BINDING");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.HelpBox(
+                "System is ready. Logic scripts are automatically detected from this GameObject and its children during compilation.",
+                MessageType.Info
+            );
+
+            EditorGUILayout.Space(2);
+
+            // THE MISSING BUTTON
+            GUI.backgroundColor = new Color(0.8f, 1f, 0.8f);
+            if (GUILayout.Button("Initialize Dashboard Environment", GUILayout.Height(30)))
             {
-                if (EditorUtility.DisplayDialog("Horizon GUI", "Replace current files with default templates?", "Yes", "Cancel"))
+                if (EditorUtility.DisplayDialog("Horizon Setup",
+                    "This will assign default templates AND create logic objects (Home, Weather, About) in this hierarchy.\n\nProceed?",
+                    "Yes", "Cancel"))
                 {
-                    HorizonGUIBuilder.SetupDefaultTemplates(authoring);
+                    HorizonGUIBuilder.SetupDashboardEnvironment(authoring);
                     serializedObject.Update();
                 }
             }
-            EditorGUILayout.EndHorizontal();
+            GUI.backgroundColor = Color.white;
 
             EditorGUILayout.EndVertical();
 
-            // 3. LOGIC BINDING
-            HorizonEditorUtils.DrawSectionHeader("LOGIC & BINDING");
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.PropertyField(_backingLogicProp, new GUIContent("Root Logic Script"));
-            if (_backingLogicProp.objectReferenceValue == null)
-            {
-                EditorGUILayout.HelpBox("A Root Logic Script is required to handle global events.", MessageType.Warning);
-            }
-            EditorGUILayout.EndVertical();
-
-            // 4. SETTINGS
+            // 5. SETTINGS
             HorizonEditorUtils.DrawSectionHeader("BUILD SETTINGS");
             EditorGUILayout.PropertyField(_clearOnBuildProp);
 
             EditorGUILayout.Space(15);
 
-            // 5. ACTION
+            // 6. ACTION
             GUI.backgroundColor = new Color(0.7f, 0.9f, 1f);
             if (GUILayout.Button("COMPILE INTERFACE", GUILayout.Height(40)))
             {
@@ -112,14 +120,6 @@ namespace BlackHorizon.HorizonGUI
         /// </summary>
         private void BuildInterface(HorizonGUIAuthoring authoring)
         {
-            if (!ValidateBackingLogic(authoring))
-            {
-                EditorUtility.DisplayDialog("Horizon GUI", "No Backing Logic found! Add HorizonGUIManager to this object before compiling.", "OK");
-                return;
-            }
-
-            ValidateBackingLogic(authoring);
-
             HorizonGUIFactory.EnsureEventSystemInside(authoring.gameObject);
 
             HorizonNode rootNode = HorizonMarkupParser.Parse(authoring.htmlFile.text);
@@ -131,14 +131,26 @@ namespace BlackHorizon.HorizonGUI
             RectTransform rootRect = canvasObj.GetComponent<RectTransform>();
 
             ClearExistingGeneratedUI(canvasObj);
-
             SetupVisualLayers(canvasObj, out GameObject contentRoot);
 
-            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.backingLogic, authoring.resourceMap);
+            // --- LOGIC DISCOVERY PHASE ---
+            List<UdonSharpBehaviour> logicScripts = CollectLogicScripts(authoring);
+            Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{logicScripts.Count}</b> logic scripts for binding.");
+
+            var manager = authoring.GetComponent<HorizonGUIManager>();
+            if (manager != null)
+            {
+                var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
+                binder.BindArray("modules", logicScripts);
+                binder.Apply();
+                EditorUtility.SetDirty(manager);
+                Debug.Log($"<color=#33FF33>[Horizon]</color> Populated <b>HorizonGUIManager.modules</b> with discovered scripts.");
+            }
+
+            // --- BUILD & INJECT ---
+            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.resourceMap, logicScripts);
 
             FinalizeLayoutAndPhysics(canvasObj, rootRect);
-
-            PerformLogicBinding(authoring, contentRoot);
 
             int errors = HorizonCompiler.ValidationErrors;
             if (errors > 0)
@@ -152,25 +164,25 @@ namespace BlackHorizon.HorizonGUI
         }
 
         /// <summary>
-        /// Ensures a valid UdonSharpBehaviour is assigned.
-        /// Returns false if no manager is found to prevent broken builds.
+        /// Discovery phase: Scans the local hierarchy for any UdonSharpBehaviour components.
+        /// These scripts are used as targets for Dependency Injection and Event Wiring.
         /// </summary>
-        private bool ValidateBackingLogic(HorizonGUIAuthoring authoring)
+        /// <param name="authoring">The root authoring component.</param>
+        /// <returns>A list of discovered logic scripts.</returns>
+        private List<UdonSharpBehaviour> CollectLogicScripts(HorizonGUIAuthoring authoring)
         {
-            if (authoring.backingLogic == null)
+            var results = new List<UdonSharpBehaviour>();
+            var allScripts = authoring.GetComponentsInChildren<UdonSharpBehaviour>(true);
+
+            foreach (var script in allScripts)
             {
-                authoring.backingLogic = authoring.GetComponent<UdonSharp.UdonSharpBehaviour>();
-                if (authoring.backingLogic != null)
-                {
-                    EditorUtility.SetDirty(authoring);
-                }
-                else
-                {
-                    Debug.LogError("[Horizon] CRITICAL: No Backing Logic found! Please add a HorizonGUIManager component.");
-                    return false;
-                }
+                if (script == null) continue;
+                if (script is HorizonGUIAuthoring) continue;
+
+                results.Add(script);
             }
-            return true;
+
+            return results;
         }
 
         /// <summary>
@@ -276,23 +288,6 @@ namespace BlackHorizon.HorizonGUI
             }
 
             HorizonGUIFactory.AddInteraction(canvasObj, rootRect.sizeDelta);
-        }
-
-        /// <summary>
-        /// Automatically links generated modules to the HorizonGUIManager.
-        /// </summary>
-        private void PerformLogicBinding(HorizonGUIAuthoring authoring, GameObject contentRoot)
-        {
-            var manager = authoring.GetComponent<HorizonGUIManager>();
-            if (manager == null) return;
-
-            var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
-            var foundModules = contentRoot.GetComponentsInChildren<HorizonGUIModule>(true);
-
-            if (foundModules.Length > 0)
-                binder.BindArray("modules", new System.Collections.Generic.List<HorizonGUIModule>(foundModules));
-
-            binder.Apply();
         }
     }
 }

@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.Events;
 using UdonSharp;
@@ -12,11 +13,23 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 {
     /// <summary>
     /// The core translation engine that converts a HorizonNode tree into Unity UI GameObjects.
-    /// Manages CSS application, Udon logic binding, and hierarchical layout construction.
+    /// Manages CSS application, Direct Dependency Injection, and Event Wiring.
     /// </summary>
     public static class HorizonCompiler
     {
         public static int ValidationErrors { get; private set; }
+
+        // Registry for u-bind: Matches "Name" to the created GameObject
+        private static Dictionary<string, GameObject> _bindingsRegistry;
+
+        // Registry for u-click: Stores buttons that need to be wired to logic scripts
+        private struct PendingEvent
+        {
+            public GameObject SourceObj;
+            public string MethodName;
+            public string TagType;
+        }
+        private static List<PendingEvent> _pendingEvents;
 
         private class ChannelData
         {
@@ -25,8 +38,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             public List<Button> Buttons = new List<Button>();
             public List<string> ButtonTargets = new List<string>();
         }
-
-        // Временное хранилище каналов во время одной сборки
         private static Dictionary<string, ChannelData> _activeChannels;
 
         /// <summary>
@@ -35,22 +46,40 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <param name="rootContainer">The parent GameObject for the generated UI.</param>
         /// <param name="rootNode">The parsed HTML-like node tree.</param>
         /// <param name="styleSheet">The parsed CSS stylesheet.</param>
-        /// <param name="logicTarget">The UdonSharpBehaviour that receives events and bindings.</param>
-        public static void BuildInterface(GameObject rootContainer, HorizonNode rootNode, HorizonStyleSheet styleSheet, UdonSharpBehaviour rootLogic, HorizonResourceMap resourceMap)
+        /// <param name="logicScripts">List of existing UdonBehaviours found in the hierarchy to bind against.</param>
+        public static void BuildInterface(
+            GameObject rootContainer,
+            HorizonNode rootNode,
+            HorizonStyleSheet styleSheet,
+            HorizonResourceMap resourceMap,
+            List<UdonSharpBehaviour> logicScripts
+        )
         {
             ValidationErrors = 0;
             _activeChannels = new Dictionary<string, ChannelData>();
+            _bindingsRegistry = new Dictionary<string, GameObject>();
+            _pendingEvents = new List<PendingEvent>();
 
-            while (rootContainer.transform.childCount > 0)
-                GameObject.DestroyImmediate(rootContainer.transform.GetChild(0).gameObject);
-
+            // 1. Build Visual Tree
             foreach (var child in rootNode.Children)
             {
-                BuildNode(child, rootContainer, styleSheet, rootLogic, resourceMap);
+                BuildNode(child, rootContainer, styleSheet, resourceMap);
             }
 
             BuildChannelControllers(rootContainer);
+
+            // 2. Inject Dependencies (u-bind)
+            if (logicScripts != null && logicScripts.Count > 0)
+            {
+                InjectDependencies(logicScripts);
+                WireEvents(logicScripts);
+                TriggerPostBuildEvents(logicScripts);
+            }
+
+            // Cleanup
             _activeChannels.Clear();
+            _bindingsRegistry.Clear();
+            _pendingEvents.Clear();
         }
 
         /// <summary>
@@ -58,10 +87,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// Propagates the <paramref name="contextLogic"/> down the hierarchy to bind events (`u-click`) and variables (`u-bind`).
         /// </summary>
         /// <param name="contextLogic">The current active UdonSharpBehaviour (Manager or Module) acting as the controller.</param>
-        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, UdonSharpBehaviour contextLogic, HorizonResourceMap resourceMap)
+        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, HorizonResourceMap resourceMap)
         {
             GameObject createdObj = null;
-
             var styles = styleSheet.GetComputedStyle(node);
 
             if (node.Attributes.TryGetValue("style", out string inlineStyle))
@@ -71,7 +99,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
 
             string tag = node.Tag.ToLower();
-            UdonSharpBehaviour nextContext = contextLogic;
 
             switch (tag)
             {
@@ -80,7 +107,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     break;
 
                 case "h-grid":
-                    createdObj = BuildDataGrid(node, parent, styles, contextLogic);
+                    createdObj = BuildDataGrid(node, parent, styles);
                     break;
 
                 case "button":
@@ -97,10 +124,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 case "input":
                     string type = node.Attributes.ContainsKey("type") ? node.Attributes["type"].ToLower() : "text";
-                    if (type == "range")
-                        createdObj = BuildRangeInput(node, parent, styles);
-                    else
-                        createdObj = BuildTextInput(node, parent, styles);
+                    if (type == "range") createdObj = BuildRangeInput(node, parent, styles);
+                    else createdObj = BuildTextInput(node, parent, styles);
                     break;
 
                 case "toggle":
@@ -112,17 +137,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     createdObj = BuildIcon(node, parent, styles, resourceMap);
                     break;
 
-                case "module":
                 case "view":
-                    createdObj = BuildModule(node, parent, styles, ref nextContext);
+                case "div":
+                case "section":
+                    createdObj = BuildContainer(GetNodeName(node), parent, styles, node);
                     break;
 
                 case "hr":
                     createdObj = BuildSeparator(node, parent, styles);
                     break;
 
-                case "div":
-                case "section":
                 default:
                     createdObj = BuildContainer(GetNodeName(node), parent, styles, node);
                     break;
@@ -130,7 +154,28 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (createdObj != null)
             {
-                ProcessLogic(createdObj, node, nextContext);
+                if (node.Attributes.TryGetValue("u-bind", out string bindName))
+                {
+                    if (!_bindingsRegistry.ContainsKey(bindName))
+                    {
+                        _bindingsRegistry.Add(bindName, createdObj);
+                    }
+                    else
+                    {
+                        Debug.LogError($"<color=red>[HorizonCompiler]</color> Duplicate u-bind detected: '<b>{bindName}</b>'. Binding might be incorrect.");
+                        ValidationErrors++;
+                    }
+                }
+
+                if (node.Attributes.TryGetValue("u-click", out string methodName))
+                {
+                    _pendingEvents.Add(new PendingEvent
+                    {
+                        SourceObj = createdObj,
+                        MethodName = methodName,
+                        TagType = tag
+                    });
+                }
 
                 RegisterChannels(createdObj, node);
 
@@ -138,7 +183,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 {
                     foreach (var child in node.Children)
                     {
-                        BuildNode(child, createdObj, styleSheet, nextContext, resourceMap);
+                        BuildNode(child, createdObj, styleSheet, resourceMap);
                     }
                 }
 
@@ -148,6 +193,156 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     pos.z = 0;
                     rt.anchoredPosition3D = pos;
                     rt.localRotation = Quaternion.identity;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Performs Dependency Injection (DI). 
+        /// Scans public/serialized fields in logic scripts and assigns UI references 
+        /// where field names match HTML 'u-bind' values.
+        /// </summary>
+        /// <param name="scripts">List of target scripts to populate.</param>
+        private static void InjectDependencies(List<UdonSharpBehaviour> scripts)
+        {
+            foreach (var script in scripts)
+            {
+                if (script == null) continue;
+
+                UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(script);
+                SerializedObject so = new SerializedObject(script);
+                bool dirty = false;
+
+                SerializedProperty prop = so.GetIterator();
+                while (prop.NextVisible(true))
+                {
+                    if (_bindingsRegistry.TryGetValue(prop.name, out GameObject boundObj))
+                    {
+                        if (boundObj == null) continue;
+
+                        UnityEngine.Object targetValue = null;
+
+                        if (prop.type.Contains("GameObject"))
+                        {
+                            targetValue = boundObj;
+                        }
+                        else
+                        {
+                            string typeName = prop.type.Replace("PPtr<$", "").Replace(">", "");
+
+                            if (typeName == "Transform" || typeName == "RectTransform")
+                                targetValue = boundObj.transform;
+                            else
+                                targetValue = boundObj.GetComponent(typeName);
+                        }
+
+                        if (targetValue != null)
+                        {
+                            prop.objectReferenceValue = targetValue;
+
+                            if (backing != null)
+                            {
+                                backing.publicVariables.TrySetVariableValue(prop.name, targetValue);
+                            }
+
+                            dirty = true;
+                            // Debug.Log($"<color=#33FF33>[Horizon Injector]</color> Linked <b>{script.name}.{prop.name}</b> to UI Object.");
+                        }
+                    }
+                }
+
+                if (dirty)
+                {
+                    so.ApplyModifiedProperties();
+                    EditorUtility.SetDirty(script);
+                    if (backing != null) EditorUtility.SetDirty(backing);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Connects UI events (onClick, onValueChanged) to UdonSharp methods.
+        /// Uses 'u-click' attribute values to find matching method names across all discovered scripts.
+        /// </summary>
+        /// <param name="scripts">List of scripts to search for methods.</param>
+        private static void WireEvents(List<UdonSharpBehaviour> scripts)
+        {
+            foreach (var evt in _pendingEvents)
+            {
+                UdonSharpBehaviour targetScript = null;
+                int matchCount = 0;
+
+                foreach (var script in scripts)
+                {
+                    var method = script.GetType().GetMethod(evt.MethodName, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                    if (method != null)
+                    {
+                        if (targetScript == null) targetScript = script;
+                        matchCount++;
+                    }
+                }
+
+                if (matchCount == 0)
+                {
+                    Debug.LogError($"<color=red>[Horizon Wiring]</color> Method '<b>{evt.MethodName}</b>' not found in any active logic scripts. u-click failed.");
+                    ValidationErrors++;
+                    continue;
+                }
+                if (matchCount > 1)
+                {
+                    Debug.LogWarning($"<color=yellow>[Horizon Wiring]</color> Ambiguity: Method '<b>{evt.MethodName}</b>' found in {matchCount} scripts. Wiring to '{targetScript.name}'. Use unique method names to avoid this.");
+                }
+
+                UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(targetScript);
+                if (backing != null)
+                {
+                    if (evt.SourceObj.GetComponent<Button>() is Button btn)
+                    {
+                        int count = btn.onClick.GetPersistentEventCount();
+                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(btn.onClick, i);
+
+                        UnityEventTools.AddStringPersistentListener(btn.onClick, backing.SendCustomEvent, evt.MethodName);
+                        EditorUtility.SetDirty(btn);
+                    }
+                    else if (evt.SourceObj.GetComponent<Toggle>() is Toggle tog)
+                    {
+                        int count = tog.onValueChanged.GetPersistentEventCount();
+                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(tog.onValueChanged, i);
+
+                        UnityEventTools.AddStringPersistentListener(tog.onValueChanged, backing.SendCustomEvent, evt.MethodName);
+                    }
+                    else if (evt.SourceObj.GetComponent<Slider>() is Slider sld)
+                    {
+                        int count = sld.onValueChanged.GetPersistentEventCount();
+                        for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(sld.onValueChanged, i);
+
+                        UnityEventTools.AddStringPersistentListener(sld.onValueChanged, backing.SendCustomEvent, evt.MethodName);
+                    }
+                    else if (evt.SourceObj.GetComponent<HorizonDataGrid>() is HorizonDataGrid grid)
+                    {
+                        HorizonGUIFactory.ConfigureLogic<HorizonDataGrid>(evt.SourceObj, binder =>
+                        {
+                            binder.Bind("targetCallback", backing);
+                            binder.BindVal("callbackEventName", evt.MethodName);
+                        });
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Invokes the 'OnHorizonBuild' method on any logic script that implements it.
+        /// This happens strictly during the editor-time build process for post-initialization.
+        /// </summary>
+        /// <param name="scripts">List of scripts to check for the build event.</param>
+        private static void TriggerPostBuildEvents(List<UdonSharpBehaviour> scripts)
+        {
+            foreach (var script in scripts)
+            {
+                var method = script.GetType().GetMethod("OnHorizonBuild", BindingFlags.Instance | BindingFlags.Public);
+                if (method != null)
+                {
+                    method.Invoke(script, null);
                 }
             }
         }
@@ -360,39 +555,9 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         }
 
         /// <summary>
-        /// Constructs a Module container and evaluates the <c>u-script</c> attribute.
-        /// <para>
-        /// If <c>u-script</c> is present, this method attaches the specified script and 
-        /// <b>switches the <paramref name="logicContext"/></b> for all subsequent children of this node.
-        /// </para>
-        /// </summary>
-        /// <param name="logicContext">
-        /// Reference to the current logic controller. Modified only if a new script is attached.
-        /// </param>
-        private static GameObject BuildModule(HorizonNode node, GameObject parent, Dictionary<string, string> styles, ref UdonSharpBehaviour logicContext)
-        {
-            GameObject go = BuildContainer(GetNodeName(node), parent, styles, node);
-
-            if (node.Attributes.TryGetValue("u-script", out string scriptName))
-            {
-                var newScript = HorizonGUIFactory.AttachLogicByString(go, scriptName);
-                if (newScript != null)
-                {
-                    logicContext = newScript;
-                }
-            }
-            else
-            {
-                HorizonGUIFactory.AttachLogic<HorizonGUIModule>(go);
-            }
-
-            return go;
-        }
-
-        /// <summary>
         /// Constructs a complex DataGrid with pooled items.
         /// </summary>
-        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles, UdonSharpBehaviour targetLogic)
+        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             int pool = ParseInt(node.Attributes, "pool", 64);
             float w = ParseFloat(node.Attributes, "cell-w", 100);
@@ -408,27 +573,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             if (node.Attributes.TryGetValue("style", out string styleVal))
                 if (styleVal.ToLower() == "circle") isCircle = true;
 
-            string eventName = "OnItemSelected";
-            UdonSharpBehaviour target = null;
-
-            if (node.Attributes.TryGetValue("u-click", out string clickMethod))
-            {
-                eventName = clickMethod;
-                target = targetLogic;
-            }
-
             var manager = HorizonGUIFactory.CreateDataGrid(
                 GetNodeName(node),
                 parent,
                 pool,
                 new Vector2(w, h),
-                target,
-                eventName,
+                null,
+                "",
                 isCircle
             );
 
             GameObject go = manager.gameObject;
-
             ApplyLayoutStyles(go, styles, node);
             ApplyContainerStyles(go, styles, node);
 
@@ -668,111 +823,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             HorizonGUIFactory.SetLayoutSize(go, 32, 32, 32, 32);
             ApplyLayoutStyles(go, styles, node);
             return go;
-        }
-
-        /// <summary>
-        /// Links Unity UI events to UdonSharp events and binds properties to script variables.
-        /// Handles GameObject vs Component type matching and performs validation.
-        /// </summary>
-        private static void ProcessLogic(GameObject obj, HorizonNode node, UdonSharpBehaviour logicTarget)
-        {
-            if (logicTarget == null) return;
-
-            // --- 1. Event Validation (u-click) ---
-            if (node.Tag.ToLower() != "h-grid" && node.Attributes.TryGetValue("u-click", out string methodName))
-            {
-                var methodInfo = logicTarget.GetType().GetMethod(methodName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-
-                if (methodInfo == null)
-                {
-                    ValidationErrors++;
-                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Method <b>'{methodName}'</b> not found in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
-                                   $"Context: <{node.Tag} u-click='{methodName}'>... in GameObject '{obj.name}'");
-                }
-                else
-                {
-                    Button btn = obj.GetComponent<Button>();
-                    Toggle tog = obj.GetComponent<Toggle>();
-                    Slider sld = obj.GetComponent<Slider>();
-
-                    UdonBehaviour backing = UdonSharpEditorUtility.GetBackingUdonBehaviour(logicTarget);
-                    if (backing == null) backing = logicTarget.GetComponent<UdonBehaviour>();
-
-                    if (backing != null)
-                    {
-                        if (btn != null)
-                        {
-                            int count = btn.onClick.GetPersistentEventCount();
-                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(btn.onClick, i);
-                            UnityEventTools.AddStringPersistentListener(btn.onClick, backing.SendCustomEvent, methodName);
-                        }
-                        else if (tog != null)
-                        {
-                            int count = tog.onValueChanged.GetPersistentEventCount();
-                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(tog.onValueChanged, i);
-                            UnityEventTools.AddStringPersistentListener(tog.onValueChanged, backing.SendCustomEvent, methodName);
-                        }
-                        else if (sld != null)
-                        {
-                            int count = sld.onValueChanged.GetPersistentEventCount();
-                            for (int i = count - 1; i >= 0; i--) UnityEventTools.RemovePersistentListener(sld.onValueChanged, i);
-                            UnityEventTools.AddStringPersistentListener(sld.onValueChanged, backing.SendCustomEvent, methodName);
-                        }
-                    }
-                }
-            }
-
-            // --- 2. Property Validation & Binding (u-bind) ---
-            if (node.Attributes.TryGetValue("u-bind", out string varName))
-            {
-                var binder = new HorizonGUIFactory.HorizonLogicBinder(logicTarget);
-
-                var fieldInfo = logicTarget.GetType().GetField(varName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
-
-                UnityEngine.Object valueToBind = null;
-
-                if (fieldInfo != null)
-                {
-                    if (fieldInfo.FieldType == typeof(GameObject))
-                    {
-                        valueToBind = obj;
-                    }
-                    else if (typeof(Component).IsAssignableFrom(fieldInfo.FieldType))
-                    {
-                        valueToBind = obj.GetComponent(fieldInfo.FieldType);
-
-                        if (valueToBind == null)
-                        {
-                            if (fieldInfo.FieldType == typeof(Transform)) valueToBind = obj.transform;
-                        }
-                    }
-                }
-
-                if (valueToBind == null)
-                {
-                    Component c = obj.GetComponent<TMP_InputField>();
-                    if (c == null) c = obj.GetComponent<Slider>();
-                    if (c == null) c = obj.GetComponent<Toggle>();
-                    if (c == null) c = obj.GetComponent<HorizonDataGrid>();
-                    if (c == null) c = obj.GetComponent<TextMeshProUGUI>();
-                    if (c == null) c = obj.transform;
-                    valueToBind = c;
-                }
-
-                bool success = binder.Bind(varName, valueToBind);
-
-                if (!success)
-                {
-                    ValidationErrors++;
-                    string typeHint = fieldInfo != null ? $" (Type: {fieldInfo.FieldType.Name})" : "";
-                    Debug.LogError($"<color=red><b>[Horizon Validator]</b></color> Variable <b>'{varName}'</b>{typeHint} binding failed in script <b>'{logicTarget.GetType().Name}'</b>.\n" +
-                                   $"Context: <{node.Tag} u-bind='{varName}'>... in GameObject '{obj.name}'. Check if the component exists or type matches.");
-                }
-                else
-                {
-                    binder.Apply();
-                }
-            }
         }
 
         /// <summary>

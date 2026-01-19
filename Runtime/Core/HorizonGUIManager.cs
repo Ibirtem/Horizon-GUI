@@ -1,25 +1,20 @@
 using UnityEngine;
 using TMPro;
-
-#if UDONSHARP
 using UdonSharp;
-using VRC.SDKBase;
-using VRC.Udon;
-#endif
+using VRC.Udon; // Добавляем using для доступа к SendCustomEvent
 
 namespace BlackHorizon.HorizonGUI
 {
     /// <summary>
     /// The core controller for the Horizon UI System.
-    /// Manages high-level state: active modules, tabs, and global overlays.
-    /// Content-specific logic (like Player Grids) should be handled by individual modules.
+    /// Manages high-level state and acts as a registry for discovered logic scripts.
     /// </summary>
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class HorizonGUIManager : UdonSharpBehaviour
     {
         [Header("System Core")]
-        [Tooltip("List of all top-level modules. Managed by the compiler.")]
-        public HorizonGUIModule[] modules;
+        [Tooltip("List of all logic scripts discovered and bound by the compiler.")]
+        public UdonSharpBehaviour[] modules;
 
         [Tooltip("Global modal/overlay container.")]
         public GameObject overlayContainer;
@@ -51,9 +46,11 @@ namespace BlackHorizon.HorizonGUI
         #region Navigation Logic
 
         /// <summary>
-        /// Switches the active module and updates its visibility.
+        /// Switches the active module based on the provided index.
+        /// Uses 'SendCustomEvent' to notify modules of visibility changes via 'OnShow' and 'OnHide'.
+        /// This ensures loose coupling with any discovered logic script.
         /// </summary>
-        /// <param name="index">The index of the module in the 'modules' array.</param>
+        /// <param name="index">The module index within the 'modules' array.</param>
         public void OpenTab(int index)
         {
             if (modules == null || index < 0 || index >= modules.Length) return;
@@ -66,16 +63,19 @@ namespace BlackHorizon.HorizonGUI
                 {
                     bool isActive = (i == index);
 
-                    if (isActive) modules[i].OnShow();
-                    else modules[i].OnHide();
-
-                    modules[i].gameObject.SetActive(isActive);
+                    if (isActive)
+                    {
+                        modules[i].SendCustomEvent("OnShow");
+                    }
+                    else
+                    {
+                        modules[i].SendCustomEvent("OnHide");
+                    }
                 }
             }
         }
 
         // --- LEGACY NAVIGATION SUPPORT ---
-        // TODO: Replace with generic u-arg event system in the future updates.
         public void OnNavHome() => OpenTab(0);
         public void OnNavWeather() => OpenTab(1);
         public void OnNavAbout() => OpenTab(2);

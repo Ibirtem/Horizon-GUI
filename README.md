@@ -9,16 +9,16 @@ Horizon is a system designed to bridge the gap between Udon code and visual UI e
 ## Key Features
 
 - **Markup-Based Workflow**
-  Define your UI structure using standard **HTML** and style it with **CSS**. No need to manually position RectTransforms or compile complex C# factories.
+  Define your UI structure using familiar **HTML** and style it with **CSS**.
 
 - **CSS Styling**
-  Centralized styling system. Change colors, rounding, and fonts in a standard `.css` file, and the entire UI updates upon rebuild.
+  A centralized styling system. Change colors, spacing, and fonts in a standard `.css` file, and the entire UI updates upon rebuild.
 
-- **Declarative Logic (`u-script`)**
-  Assign specific UdonSharp behaviours to different modules directly in HTML. Decompose your logic into small, manageable scripts.
+- **Auto-Discovery & Direct Binding**
+  Place your UdonSharp logic scripts within the UI System's hierarchy. Horizon automatically finds them and links UI components to your C# variables by matching names (e.g., `u-bind="MyButton"` links to `public Button MyButton;`).
 
-- **Auto-Binding**
-  Automatically detects UI components and links them to your UdonSharp variables and events using simple attributes (`u-bind`, `u-click`).
+- **Editor-Time Events**
+  Implement an `OnHorizonBuild()` method in your scripts to run code immediately after the UI is compiled, perfect for baking version numbers or setting initial states.
 
 - **Glassmorphism**
   Includes a lightweight background blur shader optimized for VR.
@@ -28,50 +28,58 @@ Horizon is a system designed to bridge the gap between Udon code and visual UI e
 ## Quick Start
 
 1.  **Create the System:**
-    Right-click in the Hierarchy: `Horizon -> Create UI System`.
-2.  **Configure:**
-    Select the created object. You will see the **Horizon GUI Authoring** component.
-    Assign your `.html` and `.css` files into the respective slots.
+    Right-click in the Hierarchy: `GameObject -> Horizon -> Create UI System`.
+2.  **Initialize (Optional):**
+    Select the created object. In the Inspector, click **"Initialize Dashboard Environment"** to generate default templates and logic scripts.
 3.  **Build:**
-    Click the **"COMPILE INTERFACE"** button in the Inspector.
-    The system will construct the Canvas, layout, and link all Udon scripts automatically.
+    Click the **"COMPILE INTERFACE"** button. The system will construct the Canvas, layout, and link all Udon scripts automatically.
 
 ---
 
 ## Workflow Example
 
-Horizon allows you to bind logic purely through markup attributes, keeping your C# code clean from UI references.
+Horizon links your HTML layout to your UdonSharp code through a simple name-matching system.
 
-**1. HTML Definition**
+**1. Define the UI in HTML**
+
+Use `u-bind` to mark elements that your scripts will interact with, and `u-click` to specify which method to call on an event.
+
 ```html
-<!-- Define a module and attach a specific script to it -->
-<module id="Weather" u-script="HorizonGUI_WeatherModule">
-    
-    <h1>Weather Control</h1>
-    <hr />
+<!-- A view for weather controls -->
+<div class="weather-panel" u-bind="Weather_View">
+  <h1>Weather Control</h1>
+  <hr />
 
-    <!-- Bind button click to a public method 'ToggleRain' -->
-    <button u-click="ToggleRain">
-        <icon src="cloud_rain.png" />
-    </button>
+  <!-- This button will call the "ToggleRain" method in your C# script -->
+  <button u-click="ToggleRain">
+    <icon src="cloud_rain.png" />
+  </button>
 
-    <!-- Bind slider value to a public float variable 'timeOfDay' -->
-    <input type="range" min="0" max="1" u-bind="timeOfDay" />
-
-</module>
+  <!-- This slider will be linked to a C# variable named "Weather_TimeSlider" -->
+  <input type="range" min="0" max="1" u-bind="Weather_TimeSlider" />
+</div>
 ```
 
-**2. C# Logic (UdonSharp)**
+**2. Write the Logic in C#**
+
+Create a GameObject inside your `Horizon UI System` (e.g., "Logic_Weather") and attach this UdonSharp script to it.
+
 ```csharp
+// HorizonGUI_WeatherModule.cs
 public class HorizonGUI_WeatherModule : UdonSharpBehaviour
 {
-    // Automatically linked by 'u-bind="timeOfDay"'
-    public Slider timeOfDay; 
+    // These variables are filled automatically by the compiler
+    // because their names match the 'u-bind' attributes in the HTML.
+    public GameObject Weather_View;
+    public Slider Weather_TimeSlider;
 
-    // Automatically called by 'u-click="ToggleRain"'
+    // This method is called by the button with 'u-click="ToggleRain"'
     public void ToggleRain()
     {
         Debug.Log("Rain toggled!");
+        Debug.Log("Current time from slider: " + Weather_TimeSlider.value);
     }
 }
 ```
+
+When you press **"COMPILE INTERFACE"**, Horizon finds your script, matches the variable names to the `u-bind` attributes in the HTML, and links them for you.

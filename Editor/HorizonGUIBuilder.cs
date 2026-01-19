@@ -2,6 +2,7 @@ using UnityEngine;
 using UnityEditor;
 using System.IO;
 using System.Collections.Generic;
+using UdonSharpEditor;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
@@ -36,6 +37,52 @@ namespace BlackHorizon.HorizonGUI.Editor
             SetupDefaultTemplates(authoring);
 
             Debug.Log("<color=#33FF33>[Horizon]</color> UI System initialized.");
+        }
+
+        /// <summary>
+        /// Full setup routine:
+        /// 1. Copies/Assigns default HTML/CSS templates.
+        /// 2. Creates the necessary persistent GameObjects for logic (Home, Weather, About).
+        /// 3. Attaches the corresponding UdonSharpBehaviours to them.
+        /// </summary>
+        public static void SetupDashboardEnvironment(HorizonGUIAuthoring authoring)
+        {
+            SetupDefaultTemplates(authoring);
+
+            GameObject root = authoring.gameObject;
+
+            CreateLogicModule(root, "Logic_Home", "HorizonGUI_HomeModule");
+            CreateLogicModule(root, "Logic_Weather", "HorizonGUI_WeatherModule");
+            CreateLogicModule(root, "Logic_About", "HorizonGUI_AboutModule");
+
+            EditorUtility.SetDirty(root);
+
+            Debug.Log("<color=#33FF33>[Horizon]</color> Dashboard Environment initialized. Discovery will now find these scripts.");
+        }
+
+        /// <summary>
+        /// Helper to create a child GameObject and attach a specific Udon script by name.
+        /// Prevents ghost objects in hierarchy if script attachment fails.
+        /// </summary>
+        private static void CreateLogicModule(GameObject parent, string objectName, string scriptTypeName)
+        {
+            Transform existing = parent.transform.Find(objectName);
+            if (existing != null) return;
+
+            GameObject go = new GameObject(objectName);
+            go.transform.SetParent(parent.transform, false);
+            go.transform.SetSiblingIndex(0);
+
+            var script = HorizonGUIFactory.AttachLogicByString(go, scriptTypeName);
+
+            if (script == null)
+            {
+                Debug.LogWarning($"[HorizonBuilder] Could not find or attach script '{scriptTypeName}' to '{objectName}'. Destroying ghost object.");
+                Object.DestroyImmediate(go);
+                return;
+            }
+
+            Undo.RegisterCreatedObjectUndo(go, "Create Horizon Module");
         }
 
         /// <summary>

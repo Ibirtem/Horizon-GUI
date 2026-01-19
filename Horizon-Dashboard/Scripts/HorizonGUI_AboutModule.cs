@@ -1,53 +1,36 @@
 using UnityEngine;
 using TMPro;
-
-#if UDONSHARP
 using UdonSharp;
-using VRC.SDKBase;
-using VRC.Udon;
-#endif
 
 namespace BlackHorizon.HorizonGUI
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-    public class HorizonGUI_AboutModule : HorizonGUIModule
+    public class HorizonGUI_AboutModule : UdonSharpBehaviour
     {
-        [Header("About Data")]
         public string githubUrl = "https://github.com/Ibirtem/Horizon-GUI";
         public string boostyUrl = "https://boosty.to/ibirtem";
 
-        [Header("References")]
-        public TMP_InputField githubField;
-        public TMP_InputField linkField;
+        [Header("Direct Bindings")]
+        public GameObject About_View;
+        public TMP_InputField About_GithubField;
+        public TMP_InputField About_BoostyField;
 
-        private void OnEnable()
+        public void OnHorizonBuild() => ResetText();
+
+        public void OnShow()
         {
-            ResetText();
+            if (About_View != null) About_View.SetActive(true);
         }
 
-        private void Update()
+        public void OnHide()
         {
-            if (githubField != null && githubField.text != githubUrl)
-                githubField.text = githubUrl;
-
-            if (linkField != null && linkField.text != boostyUrl)
-                linkField.text = boostyUrl;
+            if (About_View != null) About_View.SetActive(false);
         }
 
         public void ResetText()
         {
-            if (githubField != null) githubField.text = githubUrl;
-            if (linkField != null) linkField.text = boostyUrl;
-        }
-
-        public void ToggleTestModal()
-        {
-            var mgr = GetComponentInParent<HorizonGUIManager>();
-            if (mgr != null && mgr.overlayContainer != null)
-            {
-                bool state = mgr.overlayContainer.activeSelf;
-                mgr.ToggleOverlay(!state);
-            }
+            if (About_GithubField != null) About_GithubField.text = githubUrl;
+            if (About_BoostyField != null) About_BoostyField.text = boostyUrl;
         }
     }
 }

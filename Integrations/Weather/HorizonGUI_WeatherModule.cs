@@ -2,28 +2,37 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 using BlackHorizon.HorizonWeatherTime;
-
-#if UDONSHARP
 using UdonSharp;
 using VRC.SDKBase;
 using VRC.Udon;
-#endif
 
 namespace BlackHorizon.HorizonGUI.Integrations.Weather
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
-    public class HorizonGUI_WeatherModule : HorizonGUIModule
+    public class HorizonGUI_WeatherModule : UdonSharpBehaviour
     {
         [Header("Integration")]
         public WeatherTimeSystem weatherSystem;
 
-        [Header("UI References")]
-        public TextMeshProUGUI weatherStatusText;
-        public TextMeshProUGUI weatherVersionText;
+        [Header("Direct Bindings")]
+        public GameObject Weather_View;
+        public TextMeshProUGUI Weather_StatusText;
+        public TextMeshProUGUI Weather_VersionText;
+        public Toggle Weather_RealTimeToggle;
+        public Slider Weather_TimeSlider;
 
-        [Header("Controls")]
-        public Toggle realTimeToggle;
-        public Slider timeSlider;
+        [HideInInspector]
+        public string cachedVersion;
+
+        public void OnHorizonBuild()
+        {
+            TryConnectSystem();
+
+            if (Weather_VersionText != null && !string.IsNullOrEmpty(cachedVersion))
+            {
+                Weather_VersionText.text = cachedVersion;
+            }
+        }
 
         private void Start()
         {
@@ -32,76 +41,70 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
             SyncUI();
         }
 
-        private void OnEnable()
+        public void OnShow()
         {
-            TryConnectSystem();
+            if (Weather_View != null) Weather_View.SetActive(true);
             UpdateStatusVisuals();
-            SyncUI();
+        }
+
+        public void OnHide()
+        {
+            if (Weather_View != null) Weather_View.SetActive(false);
         }
 
         public void TryConnectSystem()
         {
             if (weatherSystem != null) return;
-
             GameObject sysObj = GameObject.Find("WeatherTimeSystem");
-            if (sysObj != null)
-            {
-                weatherSystem = sysObj.GetComponent<WeatherTimeSystem>();
-            }
+            if (sysObj != null) weatherSystem = sysObj.GetComponent<WeatherTimeSystem>();
         }
 
         private void Update()
         {
-            if (weatherSystem != null && timeSlider != null && weatherSystem.useRealTime)
+            if (weatherSystem != null && Weather_TimeSlider != null && weatherSystem.useRealTime)
             {
-                timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
+                Weather_TimeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
             }
         }
 
         public void UpdateStatusVisuals()
         {
-            if (weatherStatusText != null)
+            if (Weather_StatusText != null)
             {
-                weatherStatusText.text = (weatherSystem != null)
+                Weather_StatusText.text = (weatherSystem != null)
                     ? "Status: <color=#33FF33>Connected</color>"
                     : "Status: <color=#FF3333>Not Found</color>";
-            }
-
-            if (weatherSystem != null && weatherVersionText != null)
-            {
-                if (weatherVersionText.text == "---" || string.IsNullOrEmpty(weatherVersionText.text))
-                    weatherVersionText.text = "Online";
             }
         }
 
         private void SyncUI()
         {
             if (weatherSystem == null) return;
-            if (realTimeToggle != null) realTimeToggle.isOn = weatherSystem.useRealTime;
-            if (timeSlider != null)
+            if (Weather_RealTimeToggle != null) Weather_RealTimeToggle.isOn = weatherSystem.useRealTime;
+            if (Weather_TimeSlider != null)
             {
-                timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
-                timeSlider.interactable = !weatherSystem.useRealTime;
+                Weather_TimeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
+                Weather_TimeSlider.interactable = !weatherSystem.useRealTime;
             }
         }
 
         public void OnRealTimeChanged()
         {
-            if (weatherSystem == null || realTimeToggle == null) return;
-            weatherSystem.useRealTime = realTimeToggle.isOn;
-            if (timeSlider != null)
+            if (weatherSystem == null || Weather_RealTimeToggle == null) return;
+            weatherSystem.useRealTime = Weather_RealTimeToggle.isOn;
+            if (Weather_TimeSlider != null)
             {
-                timeSlider.interactable = !realTimeToggle.isOn;
-                if (realTimeToggle.isOn) timeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
+                Weather_TimeSlider.interactable = !Weather_RealTimeToggle.isOn;
+                if (Weather_RealTimeToggle.isOn) Weather_TimeSlider.SetValueWithoutNotify(weatherSystem._sunTimeOfDay);
             }
-            if (realTimeToggle.isOn) weatherSystem.ReleaseExternalControl();
+            if (Weather_RealTimeToggle.isOn) weatherSystem.ReleaseExternalControl();
             UpdateStatusVisuals();
         }
 
         public void OnTimeSliderChanged()
         {
-            if (weatherSystem == null || timeSlider == null || weatherSystem.useRealTime) return;
-            weatherSystem.SetExternalTime(timeSlider.value);
+            if (weatherSystem == null || Weather_TimeSlider == null || weatherSystem.useRealTime) return;
+            weatherSystem.SetExternalTime(Weather_TimeSlider.value);
         }
 
         public void OnProfileClear() => SetWeather(0);

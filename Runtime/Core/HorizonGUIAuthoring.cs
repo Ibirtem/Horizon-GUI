@@ -14,10 +14,6 @@ namespace BlackHorizon.HorizonGUI
         [Tooltip("Optional: Defines where to search for images referenced in HTML.")]
         public HorizonResourceMap resourceMap;
 
-        [Header("Logic Binding")]
-        [Tooltip("The UdonSharpBehaviour that will receive events (u-click) and variable links (u-bind).")]
-        public UdonSharpBehaviour backingLogic;
-
         [Header("Settings")]
         public bool clearOnBuild = true;
     }
