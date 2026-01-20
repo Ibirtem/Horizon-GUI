@@ -45,7 +45,7 @@ namespace BlackHorizon.HorizonGUI
         /// <param name="targetId">The ID of the view to show.</param>
         public void Switch(string targetId)
         {
-            if (views == null || viewIds == null || views.Length != viewIds.Length) 
+            if (views == null || viewIds == null || views.Length != viewIds.Length)
             {
                 return;
             }
@@ -55,7 +55,7 @@ namespace BlackHorizon.HorizonGUI
                 if (views[i] == null) continue;
 
                 bool match = (viewIds[i] == targetId);
-                
+
                 if (views[i].activeSelf != match)
                     views[i].SetActive(match);
             }
