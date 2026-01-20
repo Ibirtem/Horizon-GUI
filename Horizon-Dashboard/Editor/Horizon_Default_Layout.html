@@ -75,19 +75,21 @@
             </div>
 
             <!-- ABOUT MODULE -->
-            <div class="module-page" h-view="Main:About" u-bind="About_View">
-                <text class="dim-text">Version: 0.1.0</text>
+            <div class="module-page" h-view="Main:About">
+
+                <!-- Используем h-version с плейсхолдером -->
+                <text class="dim-text" h-version>Version: {v}</text>
                 <text class="dim-text">Author: Ibirtem</text>
                 <hr />
 
                 <div class="links-container">
                     <div class="link-row">
                         <icon src="icon_github.png" />
-                        <input type="text" value="https://github.com/Ibirtem/Horizon-GUI" u-bind="About_GithubField" />
+                        <input type="text" readonly value="https://github.com/Ibirtem/Horizon-GUI" />
                     </div>
                     <div class="link-row">
                         <icon src="icon_boosty.png" />
-                        <input type="text" value="https://boosty.to/ibirtem" u-bind="About_BoostyField" />
+                        <input type="text" readonly value="https://boosty.to/ibirtem" />
                     </div>
                 </div>
             </div>

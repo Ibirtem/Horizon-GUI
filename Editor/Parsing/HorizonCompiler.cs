@@ -677,11 +677,37 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             return go;
         }
 
+        private static string GetFrameworkVersion()
+        {
+            string[] guids = AssetDatabase.FindAssets("HorizonGUIManager t:MonoScript");
+            if (guids.Length > 0)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guids[0]);
+                Object scriptAsset = AssetDatabase.LoadAssetAtPath<Object>(path);
+                return HorizonEditorUtils.GetVersion(scriptAsset);
+            }
+            return "?.?.?";
+        }
+
         /// <summary>
         /// Constructs a text label with specific predefined styles (H1, H2, Label, Body).
         /// </summary>
         private static GameObject BuildText(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
+            if (node.Attributes.ContainsKey("h-version"))
+            {
+                string ver = GetFrameworkVersion();
+
+                if (!string.IsNullOrEmpty(node.TextContent) && node.TextContent.Contains("{v}"))
+                {
+                    node.TextContent = node.TextContent.Replace("{v}", ver);
+                }
+                else
+                {
+                    node.TextContent = $"v{ver}";
+                }
+            }
+
             HorizonGUIFactory.TextStyle defStyle = HorizonGUIFactory.TextStyle.Body;
             string tag = node.Tag.ToLower();
 
@@ -732,6 +758,11 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             inp.placeholder = p;
             inp.targetGraphic = img;
             inp.text = initialText;
+
+            if (node.Attributes.ContainsKey("readonly"))
+            {
+                inp.readOnly = true;
+            }
 
             if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
             BoxCollider col = root.AddComponent<BoxCollider>();

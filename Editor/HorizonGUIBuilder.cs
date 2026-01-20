@@ -42,7 +42,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// <summary>
         /// Full setup routine:
         /// 1. Copies/Assigns default HTML/CSS templates.
-        /// 2. Creates the necessary persistent GameObjects for logic (Home, Weather, About).
+        /// 2. Creates the necessary persistent GameObjects for logic (Home, Weather).
         /// 3. Attaches the corresponding UdonSharpBehaviours to them.
         /// </summary>
         public static void SetupDashboardEnvironment(HorizonGUIAuthoring authoring)
@@ -53,7 +53,6 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             CreateLogicModule(root, "Logic_Home", "HorizonGUI_HomeModule");
             CreateLogicModule(root, "Logic_Weather", "HorizonGUI_WeatherModule");
-            CreateLogicModule(root, "Logic_About", "HorizonGUI_AboutModule");
 
             EditorUtility.SetDirty(root);
 
