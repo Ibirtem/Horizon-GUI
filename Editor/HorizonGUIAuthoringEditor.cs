@@ -231,11 +231,14 @@ namespace BlackHorizon.HorizonGUI
 
         /// <summary>
         /// Creates the background layers: Stencil Mask, Glass Blur, and the Content container.
+        /// Applies consistent 40px rounding (Multiplier 1.6) to match the standard theme.
         /// </summary>
         private void SetupVisualLayers(GameObject canvasObj, out GameObject contentRoot)
         {
             Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+            float windowMultiplier = 1.6f;
 
+            // 1. Global Background (The Mask)
             GameObject bgObj = HorizonGUIFactory.CreateBlock("Global_Background", canvasObj);
             HorizonGUIFactory.Stretch(bgObj);
 
@@ -244,15 +247,19 @@ namespace BlackHorizon.HorizonGUI
             maskImg.type = Image.Type.Sliced;
             maskImg.raycastTarget = false;
             maskImg.color = Color.white;
+            maskImg.pixelsPerUnitMultiplier = windowMultiplier;
 
             Mask mask = bgObj.AddComponent<Mask>();
             mask.showMaskGraphic = false;
 
+            // 2. Glass Layer
             GameObject glass = HorizonGUIFactory.CreatePanel("Glass_Layer", bgObj, HorizonGUIFactory.ColorGlassDark, bgSprite);
             HorizonGUIFactory.Stretch(glass);
             glass.GetComponent<Image>().material = HorizonGUIFactory.GetGlassMaterial();
             glass.transform.localPosition = new Vector3(0, 0, -0.5f);
             glass.GetComponent<Image>().raycastTarget = false;
+
+            glass.GetComponent<Image>().pixelsPerUnitMultiplier = windowMultiplier;
 
             contentRoot = HorizonGUIFactory.CreateBlock("HTML_Root", canvasObj);
             contentRoot.transform.localPosition = new Vector3(0, 0, -1.0f);

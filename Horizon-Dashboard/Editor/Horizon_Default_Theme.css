@@ -2,6 +2,7 @@
     flex-direction: row;
     width: 1000px;
     height: 600px;
+    border-radius: 40px;
 }
 
 .sidebar {
@@ -9,6 +10,7 @@
     background-color: #0000004D;
     gap: 15px;
     align-items: center;
+    border-radius: 40px;
 }
 
 .content-area {

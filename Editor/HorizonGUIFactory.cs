@@ -60,6 +60,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         /// <summary>
         /// Creates a UI panel with an Image component, supporting 9-slicing.
+        /// Defaults to a standard 20px radius (Multiplier ~3.2).
         /// </summary>
         public static GameObject CreatePanel(string name, GameObject parent, Color color, Sprite sprite = null)
         {
@@ -72,7 +73,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             {
                 img.sprite = sprite;
                 img.type = Image.Type.Sliced;
-                img.pixelsPerUnitMultiplier = 3.0f;
+                img.pixelsPerUnitMultiplier = 3.2f;
             }
             return go;
         }

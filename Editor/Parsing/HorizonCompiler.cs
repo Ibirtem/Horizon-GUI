@@ -835,7 +835,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
         /// <summary>
         /// Applies container-specific styles like backgrounds and layout groups.
-        /// Determines the pixelsPerUnitMultiplier based on the node context (e.g., sidebar vs rows).
+        /// Includes smart calculation for pixelsPerUnitMultiplier to prevent ovals.
         /// </summary>
         private static void ApplyContainerStyles(GameObject go, Dictionary<string, string> styles, HorizonNode node)
         {
@@ -843,25 +843,64 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             {
                 Image img = go.GetComponent<Image>();
                 if (img == null) img = go.AddComponent<Image>();
+
                 if (ColorUtility.TryParseHtmlString(hex, out Color col))
                 {
                     img.color = col;
+
                     if (img.sprite == null)
                     {
                         img.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
                         img.type = Image.Type.Sliced;
 
-                        bool isFullRound = false;
-                        if (node != null && node.Attributes.TryGetValue("class", out string cls))
+                        // --- SMART RADIUS CALCULATION ---
+
+                        // 1. Physical properties of our generated texture (128x128 ( for now :c ))
+                        const float SRC_RADIUS = 64f;
+
+                        // 2. Determine Dimensions
+                        RectTransform rt = go.GetComponent<RectTransform>();
+                        float w = rt.rect.width;
+                        float h = rt.rect.height;
+                        if (w <= 1) w = ParseFloat(styles, "width", 100);
+                        if (h <= 1) h = ParseFloat(styles, "height", 100);
+
+                        float minSide = Mathf.Min(w, h);
+                        float maxPossibleRadius = minSide / 2f;
+
+                        // 3. Determine Desired Target Radius
+                        float targetRadius = 20f;
+
+                        if (styles.ContainsKey("border-radius"))
                         {
-                            string lowCls = cls.ToLower();
-                            if (lowCls.Contains("sidebar") || lowCls.Contains("nav-btn") || lowCls.Contains("profile-btn"))
-                                isFullRound = true;
+                            targetRadius = ParseFloat(styles, "border-radius", 20f);
                         }
-                        img.pixelsPerUnitMultiplier = isFullRound ? 1.0f : 3.0f;
+                        else
+                        {
+                            bool isFullRound = false;
+                            if (node != null && node.Attributes.TryGetValue("class", out string cls))
+                            {
+                                string lowCls = cls.ToLower();
+                                if (lowCls.Contains("sidebar") || lowCls.Contains("nav-btn") || lowCls.Contains("profile-btn") || lowCls.Contains("circle"))
+                                {
+                                    isFullRound = true;
+                                }
+                            }
+
+                            if (isFullRound) targetRadius = maxPossibleRadius;
+                        }
+
+                        // 4. Safety Clamp
+                        if (targetRadius > maxPossibleRadius) targetRadius = maxPossibleRadius;
+                        if (targetRadius < 1f) targetRadius = 1f;
+
+                        // 5. Apply
+                        img.pixelsPerUnitMultiplier = SRC_RADIUS / targetRadius;
                     }
                 }
             }
+
+            // --- Layout & Padding Logic (Unchanged) ---
 
             bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
             float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
@@ -920,7 +959,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 glg.spacing = new Vector2(spacing, spacing);
             }
         }
-
         /// <summary>
         /// Applies LayoutElement properties (width, height, flex-grow) to the GameObject.
         /// Handles 'ignore-layout' for overlay positioning.
