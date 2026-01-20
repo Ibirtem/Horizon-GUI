@@ -591,6 +591,21 @@ namespace BlackHorizon.HorizonGUI.Editor
                     binder.Bind("gridManager", manager);
                     binder.BindVal("slotIndex", i);
                 });
+
+                Button btn = slotObj.GetComponent<Button>();
+                if (btn != null)
+                {
+                    var backingItem = UdonSharpEditorUtility.GetBackingUdonBehaviour(item);
+                    if (backingItem != null)
+                    {
+                        UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
+                            btn.onClick,
+                            backingItem.SendCustomEvent,
+                            "OnClick"
+                        );
+                    }
+                }
+
                 slots.Add(item);
             }
 

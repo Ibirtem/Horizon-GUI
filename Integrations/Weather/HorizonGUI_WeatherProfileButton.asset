@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
   m_Name: HorizonGUI_WeatherProfileButton
   m_EditorClassIdentifier: 
-  serializedUdonProgramAsset: {fileID: 11400000, guid: c4053ee8653cdc240baf7cc19ef8ce90,
+  serializedUdonProgramAsset: {fileID: 11400000, guid: a4698247a12906d4793fb4f2f0fed97b,
     type: 2}
   udonAssembly: 
   assemblyError: 
