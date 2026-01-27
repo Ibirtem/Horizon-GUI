@@ -253,13 +253,16 @@ namespace BlackHorizon.HorizonGUI
             mask.showMaskGraphic = false;
 
             // 2. Glass Layer
-            GameObject glass = HorizonGUIFactory.CreatePanel("Glass_Layer", bgObj, HorizonGUIFactory.ColorGlassDark, bgSprite);
-            HorizonGUIFactory.Stretch(glass);
-            glass.GetComponent<Image>().material = HorizonGUIFactory.GetGlassMaterial();
-            glass.transform.localPosition = new Vector3(0, 0, -0.5f);
-            glass.GetComponent<Image>().raycastTarget = false;
+            GameObject glass = HorizonGUIFactory.CreatePanel("Glass_Layer", bgObj);
+            Image glassImg = glass.GetComponent<Image>();
+            glassImg.color = HorizonGUIFactory.ColorGlassDark;
+            glassImg.sprite = bgSprite;
 
-            glass.GetComponent<Image>().pixelsPerUnitMultiplier = windowMultiplier;
+            HorizonGUIFactory.Stretch(glass);
+            glassImg.material = HorizonGUIFactory.GetGlassMaterial();
+            glass.transform.localPosition = new Vector3(0, 0, -0.5f);
+            glassImg.raycastTarget = false;
+            glassImg.pixelsPerUnitMultiplier = windowMultiplier;
 
             contentRoot = HorizonGUIFactory.CreateBlock("HTML_Root", canvasObj);
             contentRoot.transform.localPosition = new Vector3(0, 0, -1.0f);

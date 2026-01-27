@@ -523,15 +523,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static GameObject BuildSeparator(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            float height = styles.ContainsKey("height") ? ParseFloat(styles, "height", 5) : 5;
-            float padding = ParseFloat(styles, "padding", 0);
-            float width = ParseFloat(styles, "width", -1);
-
             GameObject wrapper = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
 
-            GameObject line = HorizonGUIFactory.CreatePanel("Visual_Line", wrapper, new Color(1, 1, 1, 0.2f), null);
+            GameObject line = HorizonGUIFactory.CreatePanel("Visual_Line", wrapper);
+            Image img = line.GetComponent<Image>();
+            img.sprite = null;
 
             ApplyContainerStyles(line, styles, node);
+
+            float height = ParseFloat(styles, "height", 2);
+            float width = ParseFloat(styles, "width", -1);
 
             HorizonGUIFactory.SetLayoutSize(wrapper,
                 minH: height,
@@ -540,6 +541,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 flexW: width > 0 ? 0 : 1
             );
 
+            float padding = ParseFloat(styles, "padding", 0);
             RectTransform lineRect = line.GetComponent<RectTransform>();
             lineRect.anchorMin = Vector2.zero;
             lineRect.anchorMax = Vector2.one;
@@ -834,19 +836,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static GameObject BuildButton(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-            GameObject btnRoot = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.05f), bgSprite);
+            GameObject btnRoot = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent);
+            Image bgImg = btnRoot.GetComponent<Image>();
+            bgImg.raycastTarget = true;
 
-            Image stateImg = btnRoot.GetComponent<Image>();
-            stateImg.raycastTarget = true;
-            stateImg.type = Image.Type.Sliced;
-            stateImg.pixelsPerUnitMultiplier = 1.0f;
-
-            GameObject hoverObj = HorizonGUIFactory.CreatePanel("Interaction_Overlay", btnRoot, Color.white, bgSprite);
+            GameObject hoverObj = HorizonGUIFactory.CreatePanel("Interaction_Overlay", btnRoot);
             HorizonGUIFactory.Stretch(hoverObj);
             Image hoverImg = hoverObj.GetComponent<Image>();
-            hoverImg.type = Image.Type.Sliced;
-            hoverImg.pixelsPerUnitMultiplier = 1.0f;
 
             LayoutElement le = hoverObj.AddComponent<LayoutElement>();
             le.ignoreLayout = true;
@@ -856,16 +852,12 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             btn.transition = Selectable.Transition.ColorTint;
 
             ColorBlock cb = btn.colors;
-            cb.normalColor = new Color(1, 1, 1, 0f);
+            cb.normalColor = Color.clear;
             cb.highlightedColor = new Color(1, 1, 1, 0.1f);
             cb.pressedColor = new Color(1, 1, 1, 0.2f);
-            cb.selectedColor = new Color(1, 1, 1, 0.0f);
+            cb.selectedColor = Color.clear;
             cb.fadeDuration = 0.1f;
             btn.colors = cb;
-
-            if (!styles.ContainsKey("align-items")) styles["align-items"] = "center";
-            if (!styles.ContainsKey("justify-content")) styles["justify-content"] = "center";
-            if (!styles.ContainsKey("padding")) styles["padding"] = "10px";
 
             ApplyContainerStyles(btnRoot, styles, node);
             ApplyLayoutStyles(btnRoot, styles);
@@ -914,25 +906,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             if (node.Attributes.ContainsKey("h-version"))
             {
                 string ver = GetFrameworkVersion();
-
                 if (!string.IsNullOrEmpty(node.TextContent) && node.TextContent.Contains("{v}"))
-                {
                     node.TextContent = node.TextContent.Replace("{v}", ver);
-                }
                 else
-                {
                     node.TextContent = $"v{ver}";
-                }
             }
 
-            HorizonGUIFactory.TextStyle defStyle = HorizonGUIFactory.TextStyle.Body;
-            string tag = node.Tag.ToLower();
-
-            if (tag == "h1") defStyle = HorizonGUIFactory.TextStyle.H1;
-            else if (tag == "h2") defStyle = HorizonGUIFactory.TextStyle.H2;
-            else if (tag == "label") defStyle = HorizonGUIFactory.TextStyle.SmallDim;
-
-            var tmp = HorizonGUIFactory.CreateText(parent, node.TextContent, defStyle);
+            var tmp = HorizonGUIFactory.CreateText(parent, node.TextContent);
             tmp.gameObject.name = GetNodeName(node);
 
             ApplyTextStyles(tmp, styles);
@@ -947,8 +927,11 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         private static GameObject BuildTextInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
             Sprite bg = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-            GameObject root = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent, new Color(1, 1, 1, 0.1f), bg);
+
+            GameObject root = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent);
             Image img = root.GetComponent<Image>();
+            img.color = new Color(1, 1, 1, 0.1f);
+            img.sprite = bg;
             img.type = Image.Type.Sliced;
             img.pixelsPerUnitMultiplier = 3.0f;
 
@@ -959,14 +942,18 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             string initialText = node.Attributes.ContainsKey("value") ? node.Attributes["value"] : "";
 
-            var t = HorizonGUIFactory.CreateText(textArea, initialText, HorizonGUIFactory.TextStyle.Body);
+            var t = HorizonGUIFactory.CreateText(textArea, initialText);
+            t.fontSize = 24;
             t.color = Color.white;
 
             GameObject placeObj = HorizonGUIFactory.CreateBlock("Placeholder", textArea);
             HorizonGUIFactory.Stretch(placeObj);
 
             string placeText = node.Attributes.ContainsKey("placeholder") ? node.Attributes["placeholder"] : "Enter text...";
-            var p = HorizonGUIFactory.CreateText(placeObj, placeText, HorizonGUIFactory.TextStyle.BodyDim);
+
+            var p = HorizonGUIFactory.CreateText(placeObj, placeText);
+            p.fontSize = 24;
+            p.color = new Color(1, 1, 1, 0.5f);
             p.fontStyle = FontStyles.Italic;
 
             TMP_InputField inp = root.AddComponent<TMP_InputField>();
@@ -1005,19 +992,26 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             GameObject root = HorizonGUIFactory.CreateRow(GetNodeName(node), parent, spacing: spacing, align: TextAnchor.MiddleLeft);
 
-            GameObject bgObj = HorizonGUIFactory.CreatePanel("Background", root, new Color(1, 1, 1, 0.1f), HorizonGUIFactory.GetOrGenerateRoundedSprite());
+            GameObject bgObj = HorizonGUIFactory.CreatePanel("Background", root);
+            Image bgImg = bgObj.GetComponent<Image>();
+            bgImg.color = new Color(1, 1, 1, 0.1f);
+            bgImg.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+
             HorizonGUIFactory.SetLayoutSize(bgObj, 40, 40, 40, 40);
+            bgImg.raycastTarget = true;
 
-            bgObj.GetComponent<Image>().raycastTarget = true;
+            GameObject checkObj = HorizonGUIFactory.CreatePanel("Checkmark", bgObj);
+            Image checkImg = checkObj.GetComponent<Image>();
+            checkImg.color = Color.white;
+            checkImg.sprite = HorizonGUIFactory.LoadPackageSprite("checkmark.png");
 
-            GameObject checkObj = HorizonGUIFactory.CreatePanel("Checkmark", bgObj, Color.white, HorizonGUIFactory.LoadPackageSprite("checkmark.png"));
             RectTransform checkRect = checkObj.GetComponent<RectTransform>();
             checkRect.anchorMin = new Vector2(0.2f, 0.2f); checkRect.anchorMax = new Vector2(0.8f, 0.8f);
             checkRect.offsetMin = Vector2.zero; checkRect.offsetMax = Vector2.zero;
 
             Toggle tog = root.AddComponent<Toggle>();
-            tog.targetGraphic = bgObj.GetComponent<Image>();
-            tog.graphic = checkObj.GetComponent<Image>();
+            tog.targetGraphic = bgImg;
+            tog.graphic = checkImg;
             tog.isOn = false;
 
             tog.transition = Selectable.Transition.ColorTint;
@@ -1031,7 +1025,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             if (!string.IsNullOrEmpty(node.TextContent))
             {
-                var label = HorizonGUIFactory.CreateText(root, node.TextContent, HorizonGUIFactory.TextStyle.Body);
+                var label = HorizonGUIFactory.CreateText(root, node.TextContent);
+                label.fontSize = 24;
                 ApplyTextStyles(label, styles);
             }
 
@@ -1096,14 +1091,17 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 {
                     img.color = col;
 
+                    if (col.a <= 0.01f)
+                    {
+                        img.raycastTarget = false;
+                    }
+
                     if (img.sprite == null)
                     {
                         img.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
                         img.type = Image.Type.Sliced;
 
-                        // --- SMART RADIUS CALCULATION ---
-
-                        // 1. Physical properties of our generated texture (128x128 ( for now :c ))
+                        // 1. Physical properties of generated texture
                         const float SRC_RADIUS = 64f;
 
                         // 2. Determine Dimensions
@@ -1276,6 +1274,14 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 if (align == "center") tmp.alignment = TextAlignmentOptions.Center;
                 if (align == "right") tmp.alignment = TextAlignmentOptions.Right;
                 if (align == "left") tmp.alignment = TextAlignmentOptions.Left;
+            }
+
+            if (styles.TryGetValue("font-style", out string fStyle))
+            {
+                fStyle = fStyle.ToLower();
+                if (fStyle.Contains("bold")) tmp.fontStyle |= FontStyles.Bold;
+                if (fStyle.Contains("italic")) tmp.fontStyle |= FontStyles.Italic;
+                if (fStyle.Contains("normal")) tmp.fontStyle = FontStyles.Normal;
             }
         }
 

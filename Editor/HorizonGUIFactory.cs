@@ -62,19 +62,18 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// Creates a UI panel with an Image component, supporting 9-slicing.
         /// Defaults to a standard 20px radius (Multiplier ~3.2).
         /// </summary>
-        public static GameObject CreatePanel(string name, GameObject parent, Color color, Sprite sprite = null)
+        public static GameObject CreatePanel(string name, GameObject parent)
         {
             GameObject go = CreateBlock(name, parent);
             Image img = go.AddComponent<Image>();
-            img.color = color;
             img.raycastTarget = false;
 
-            if (sprite != null)
-            {
-                img.sprite = sprite;
-                img.type = Image.Type.Sliced;
-                img.pixelsPerUnitMultiplier = 3.2f;
-            }
+            img.color = Color.white;
+
+            img.type = Image.Type.Sliced;
+            img.sprite = GetOrGenerateRoundedSprite();
+            img.pixelsPerUnitMultiplier = 1.0f;
+
             return go;
         }
 
@@ -266,24 +265,17 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// <summary>
         /// Creates a TextMeshProUGUI element with theme-compliant styling.
         /// </summary>
-        public static TextMeshProUGUI CreateText(GameObject parent, string content, TextStyle style, TextAlignmentOptions align = TextAlignmentOptions.Left)
+        public static TextMeshProUGUI CreateText(GameObject parent, string content)
         {
             GameObject go = CreateBlock("Label", parent);
             TextMeshProUGUI tmp = go.AddComponent<TextMeshProUGUI>();
             tmp.text = content;
-            tmp.alignment = align;
             tmp.raycastTarget = false;
 
-            switch (style)
-            {
-                case TextStyle.H1: tmp.fontSize = SIZE_H1; tmp.fontStyle = FontStyles.Bold; break;
-                case TextStyle.H2: tmp.fontSize = SIZE_H2; tmp.fontStyle = FontStyles.Bold; break;
-                case TextStyle.Body: tmp.fontSize = SIZE_BODY; tmp.color = ColorPrimary; break;
-                case TextStyle.BodyDim: tmp.fontSize = SIZE_BODY; tmp.color = ColorSecondary; break;
-                case TextStyle.Small: tmp.fontSize = SIZE_SMALL; tmp.color = ColorPrimary; break;
-                case TextStyle.SmallDim: tmp.fontSize = SIZE_SMALL; tmp.color = ColorSecondary; break;
-                case TextStyle.Clock: tmp.fontSize = SIZE_CLOCK * 1.3f; tmp.color = ColorSecondary; break;
-            }
+            tmp.fontSize = 24;
+            tmp.color = Color.white;
+            tmp.alignment = TextAlignmentOptions.Left;
+
             return tmp;
         }
 
@@ -293,21 +285,23 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// </summary>
         public static GameObject CreateIconButton(string name, GameObject parent, Sprite bgSprite, Sprite iconSprite)
         {
-            GameObject btnObj = CreatePanel(name, parent, new Color(1, 1, 1, 0.0f), bgSprite);
-            btnObj.GetComponent<Image>().pixelsPerUnitMultiplier = 1.0f;
-            btnObj.GetComponent<Image>().raycastTarget = true;
+            GameObject btnObj = CreatePanel(name, parent);
+            Image bgImg = btnObj.GetComponent<Image>();
+            bgImg.color = Color.clear;
+            bgImg.sprite = bgSprite;
+            bgImg.raycastTarget = true;
 
-            GameObject hoverObj = CreatePanel("Interaction_Overlay", btnObj, Color.white, bgSprite);
+            GameObject hoverObj = CreatePanel("Interaction_Overlay", btnObj);
+            Image hoverImg = hoverObj.GetComponent<Image>();
+            hoverImg.color = Color.white;
+            hoverImg.sprite = bgSprite;
+            hoverImg.raycastTarget = false;
+
             Stretch(hoverObj);
-
-            hoverObj.GetComponent<Image>().pixelsPerUnitMultiplier = 1.0f;
-
-            hoverObj.GetComponent<Image>().raycastTarget = false;
             hoverObj.AddComponent<LayoutElement>().ignoreLayout = true;
 
             GameObject iconObj = CreateBlock("Icon", btnObj);
             RectTransform iconRect = iconObj.GetComponent<RectTransform>();
-
             iconRect.anchorMin = new Vector2(0.22f, 0.22f);
             iconRect.anchorMax = new Vector2(0.78f, 0.78f);
             iconRect.offsetMin = Vector2.zero;
@@ -319,7 +313,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             iconImg.raycastTarget = false;
 
             Button b = btnObj.AddComponent<Button>();
-            b.targetGraphic = hoverObj.GetComponent<Image>();
+            b.targetGraphic = hoverImg;
             b.transition = Selectable.Transition.ColorTint;
 
             ColorBlock cb = b.colors;
@@ -748,26 +742,30 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject container = CreateBlock("Slider", parent);
             SetLayoutSize(container, minH: 40, flexW: 1);
 
-            GameObject bgObj = CreatePanel("Background", container, new Color(1, 1, 1, 0.1f), GetOrGenerateRoundedSprite());
+            GameObject bgObj = CreatePanel("Background", container);
+            Image bgImg = bgObj.GetComponent<Image>();
+            bgImg.color = new Color(1, 1, 1, 0.1f);
+            bgImg.sprite = GetOrGenerateRoundedSprite();
+            bgImg.raycastTarget = true;
+
             RectTransform bgRect = bgObj.GetComponent<RectTransform>();
             bgRect.anchorMin = new Vector2(0, 0.5f);
             bgRect.anchorMax = new Vector2(1, 0.5f);
             bgRect.sizeDelta = new Vector2(0, 6);
-            bgObj.GetComponent<Image>().raycastTarget = true;
 
             GameObject handleArea = CreateBlock("Handle Slide Area", container);
             Stretch(handleArea);
-            RectTransform haRect = handleArea.GetComponent<RectTransform>();
-            haRect.offsetMin = new Vector2(0, 0);
-            haRect.offsetMax = new Vector2(0, 0);
 
-            GameObject handle = CreatePanel("Handle", handleArea, Color.white, GetOrGenerateRoundedSprite());
+            GameObject handle = CreatePanel("Handle", handleArea);
+            Image hImg = handle.GetComponent<Image>();
+            hImg.color = Color.white;
+            hImg.sprite = GetOrGenerateRoundedSprite();
+            hImg.raycastTarget = true;
+
             RectTransform hRect = handle.GetComponent<RectTransform>();
             hRect.sizeDelta = new Vector2(40, 0);
             hRect.anchorMin = new Vector2(0, 0.5f);
             hRect.anchorMax = new Vector2(0, 0.5f);
-            Image hImg = handle.GetComponent<Image>();
-            hImg.raycastTarget = true;
 
             Slider slider = container.AddComponent<Slider>();
             slider.minValue = min;
