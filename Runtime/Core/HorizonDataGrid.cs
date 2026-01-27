@@ -20,7 +20,7 @@ namespace BlackHorizon.HorizonGUI
     {
         [Header("Pool Configuration")]
         [Tooltip("The fixed array of reuseable UI slots.")]
-        public HorizonGridItem[] slotPool;
+        public HorizonSmartSlot[] slotPool;
 
         [Tooltip("How many items to skip per page.")]
         public int itemsPerPage = 16;
@@ -32,6 +32,9 @@ namespace BlackHorizon.HorizonGUI
         public string callbackEventName = "OnGridItemSelected";
         [Tooltip("Variable name in target to store the Item ID.")]
         public string targetVariableInt = "_lastEventInt";
+
+        private const string DEFAULT_TEXT_KEY = "MainText";
+        private const string DEFAULT_ICON_KEY = "MainIcon";
 
         [Header("Navigation (Optional)")]
         public TextMeshProUGUI pageIndicator;
@@ -78,7 +81,7 @@ namespace BlackHorizon.HorizonGUI
 
             for (int i = 0; i < poolSize; i++)
             {
-                HorizonGridItem item = slotPool[i];
+                HorizonSmartSlot item = slotPool[i];
                 if (item == null) continue;
 
                 int dataIndex = startIndex + i;
@@ -86,12 +89,18 @@ namespace BlackHorizon.HorizonGUI
                 if (dataIndex < _totalItems)
                 {
                     item.gameObject.SetActive(true);
+                    item.currentDataId = _dataIds[dataIndex];
+
+                    if (_dataNames != null && dataIndex < _dataNames.Length)
+                    {
+                        item.SetText(DEFAULT_TEXT_KEY, _dataNames[dataIndex]);
+                    }
 
                     Sprite icon = null;
                     if (_dataIcons != null && dataIndex < _dataIcons.Length)
                         icon = _dataIcons[dataIndex];
 
-                    item.UpdateView(_dataIds[dataIndex], _dataNames[dataIndex], icon);
+                    item.SetImage(DEFAULT_ICON_KEY, icon);
                 }
                 else
                 {

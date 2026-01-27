@@ -19,6 +19,10 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
     {
         public static int ValidationErrors { get; private set; }
 
+        private static HorizonStyleSheet _activeStyleSheet;
+        private static HorizonResourceMap _activeResourceMap;
+        private static bool _isBuildingTemplate = false;
+
         // Registry for u-bind: Matches "Name" to the created GameObject
         private static Dictionary<string, GameObject> _bindingsRegistry;
 
@@ -42,10 +46,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// <summary>
         /// Clears the existing UI and rebuilds the interface from the provided node tree.
         /// </summary>
-        /// <param name="rootContainer">The parent GameObject for the generated UI.</param>
-        /// <param name="rootNode">The parsed HTML-like node tree.</param>
-        /// <param name="styleSheet">The parsed CSS stylesheet.</param>
-        /// <param name="logicScripts">List of existing UdonBehaviours found in the hierarchy to bind against.</param>
         public static void BuildInterface(
             GameObject rootContainer,
             HorizonNode rootNode,
@@ -59,10 +59,15 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             _bindingsRegistry = new Dictionary<string, GameObject>();
             _pendingEvents = new List<PendingEvent>();
 
+            // Init Context
+            _activeStyleSheet = styleSheet;
+            _activeResourceMap = resourceMap;
+            _isBuildingTemplate = false;
+
             // 1. Build Visual Tree
             foreach (var child in rootNode.Children)
             {
-                BuildNode(child, rootContainer, styleSheet, resourceMap);
+                BuildNode(child, rootContainer);
             }
 
             BuildChannelControllers(rootContainer);
@@ -79,17 +84,19 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             _activeChannels.Clear();
             _bindingsRegistry.Clear();
             _pendingEvents.Clear();
+
+            _activeStyleSheet = null;
+            _activeResourceMap = null;
         }
 
         /// <summary>
         /// Recursive entry point for building the UI tree.
-        /// Propagates the <paramref name="contextLogic"/> down the hierarchy to bind events (`u-click`) and variables (`u-bind`).
+        /// Uses static context fields instead of passing arguments recursively.
         /// </summary>
-        /// <param name="contextLogic">The current active UdonSharpBehaviour (Manager or Module) acting as the controller.</param>
-        private static void BuildNode(HorizonNode node, GameObject parent, HorizonStyleSheet styleSheet, HorizonResourceMap resourceMap)
+        private static void BuildNode(HorizonNode node, GameObject parent)
         {
             GameObject createdObj = null;
-            var styles = styleSheet.GetComputedStyle(node);
+            var styles = _activeStyleSheet.GetComputedStyle(node);
 
             if (node.Attributes.TryGetValue("style", out string inlineStyle))
             {
@@ -133,7 +140,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 case "icon":
                 case "img":
-                    createdObj = BuildIcon(node, parent, styles, resourceMap);
+                    createdObj = BuildIcon(node, parent, styles, _activeResourceMap);
                     break;
 
                 case "view":
@@ -155,24 +162,34 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             {
                 if (node.Attributes.TryGetValue("u-bind", out string bindName))
                 {
-                    if (!_bindingsRegistry.ContainsKey(bindName))
+                    if (_isBuildingTemplate)
                     {
-                        _bindingsRegistry.Add(bindName, createdObj);
+                        createdObj.name = $"{createdObj.name}__BIND__{bindName}";
                     }
                     else
                     {
-                        Debug.LogError($"<color=red>[HorizonCompiler]</color> Duplicate u-bind detected: '<b>{bindName}</b>'. Binding might be incorrect.");
-                        ValidationErrors++;
+                        if (!_bindingsRegistry.ContainsKey(bindName))
+                        {
+                            _bindingsRegistry.Add(bindName, createdObj);
+                        }
+                        else
+                        {
+                            Debug.LogError($"<color=red>[HorizonCompiler]</color> Duplicate u-bind detected: '<b>{bindName}</b>'. Binding might be incorrect.");
+                            ValidationErrors++;
+                        }
                     }
                 }
 
                 if (node.Attributes.TryGetValue("u-click", out string methodName))
                 {
-                    _pendingEvents.Add(new PendingEvent
+                    if (!_isBuildingTemplate)
                     {
-                        SourceObj = createdObj,
-                        MethodName = methodName
-                    });
+                        _pendingEvents.Add(new PendingEvent
+                        {
+                            SourceObj = createdObj,
+                            MethodName = methodName
+                        });
+                    }
                 }
 
                 RegisterChannels(createdObj, node);
@@ -181,7 +198,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 {
                     foreach (var child in node.Children)
                     {
-                        BuildNode(child, createdObj, styleSheet, resourceMap);
+                        BuildNode(child, createdObj);
                     }
                 }
 
@@ -557,7 +574,41 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
-            int pool = ParseInt(node.Attributes, "pool", 64);
+            int poolSize = ParseInt(node.Attributes, "pool", 64);
+            GameObject gridObj = CreateGridContainer(node, parent, styles);
+            var manager = HorizonGUIFactory.AttachLogic<HorizonDataGrid>(gridObj);
+
+            GameObject prototype = PrepareGridTemplate(node);
+            bool isTemplated = (prototype != null);
+
+            var slots = new List<HorizonSmartSlot>();
+
+            for (int i = 0; i < poolSize; i++)
+            {
+                GameObject slotObj = CreateSlotInstance(gridObj, prototype, node, i);
+
+                HorizonSmartSlot slotLogic = ConfigureSlotLogic(slotObj, manager, i, isTemplated);
+
+                slots.Add(slotLogic);
+            }
+
+            if (prototype != null && prototype.transform.parent != null)
+            {
+                Object.DestroyImmediate(prototype.transform.parent.gameObject);
+            }
+
+            ConfigureGridManager(gridObj, manager, slots, poolSize);
+
+            return gridObj;
+        }
+
+        // --- SUB-ROUTINES ---
+
+        /// <summary>
+        /// Creates the root GameObject for the grid and applies layout styles.
+        /// </summary>
+        private static GameObject CreateGridContainer(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
+        {
             float w = ParseFloat(node.Attributes, "cell-w", 100);
             float h = ParseFloat(node.Attributes, "cell-h", 100);
 
@@ -567,25 +618,191 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 styles["gap"] = $"{attrSpacing}px";
             }
 
-            bool isCircle = false;
-            if (node.Attributes.TryGetValue("style", out string styleVal))
-                if (styleVal.ToLower() == "circle") isCircle = true;
+            GameObject gridObj = HorizonGUIFactory.CreateGrid(GetNodeName(node), parent, new Vector2(w, h), Vector2.zero);
 
-            var manager = HorizonGUIFactory.CreateDataGrid(
-                GetNodeName(node),
-                parent,
-                pool,
-                new Vector2(w, h),
-                null,
-                "",
-                isCircle
-            );
+            ApplyLayoutStyles(gridObj, styles, node);
+            ApplyContainerStyles(gridObj, styles, node);
 
-            GameObject go = manager.gameObject;
-            ApplyLayoutStyles(go, styles, node);
-            ApplyContainerStyles(go, styles, node);
+            return gridObj;
+        }
 
-            return go;
+        /// <summary>
+        /// Parses the children of <h-grid> to create a prototype GameObject.
+        /// Returns null if no children exist.
+        /// </summary>
+        private static GameObject PrepareGridTemplate(HorizonNode node)
+        {
+            if (node.Children.Count == 0) return null;
+
+            GameObject tempHolder = new GameObject("Temp_Holder");
+            tempHolder.SetActive(false);
+
+            _isBuildingTemplate = true;
+            try
+            {
+                BuildNode(node.Children[0], tempHolder);
+            }
+            catch
+            {
+                Object.DestroyImmediate(tempHolder);
+                throw;
+            }
+            finally
+            {
+                _isBuildingTemplate = false;
+            }
+
+            if (tempHolder.transform.childCount > 0)
+            {
+                return tempHolder.transform.GetChild(0).gameObject;
+            }
+
+            Object.DestroyImmediate(tempHolder);
+            return null;
+        }
+
+        /// <summary>
+        /// Instantiates a slot from the prototype.
+        /// Requires a template defined in HTML.
+        /// </summary>
+        private static GameObject CreateSlotInstance(GameObject gridParent, GameObject prototype, HorizonNode node, int index)
+        {
+            string slotName = $"Slot_{index:00}";
+
+            if (prototype != null)
+            {
+                GameObject instance = Object.Instantiate(prototype, gridParent.transform);
+                instance.name = slotName;
+                instance.SetActive(true);
+                return instance;
+            }
+            else
+            {
+                Debug.LogError($"<color=red>[HorizonCompiler]</color> Grid '<b>{GetNodeName(node)}</b>' has no template! Please add children to <h-grid> in your HTML.");
+                ValidationErrors++;
+
+                GameObject errorObj = new GameObject(slotName + "_ERROR");
+                errorObj.transform.SetParent(gridParent.transform);
+                var img = errorObj.AddComponent<Image>();
+                img.color = Color.red;
+                return errorObj;
+            }
+        }
+
+        /// <summary>
+        /// Attaches the SmartSlot component, bakes bindings, and wires click events.
+        /// </summary>
+        private static HorizonSmartSlot ConfigureSlotLogic(GameObject slotObj, HorizonDataGrid manager, int index, bool isTemplated)
+        {
+            var item = HorizonGUIFactory.AttachLogic<HorizonSmartSlot>(slotObj);
+
+            BakeSmartSlotBindings(slotObj, item, isTemplated);
+
+            HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slotObj, binder =>
+            {
+                binder.Bind("gridManager", manager);
+                binder.BindVal("slotIndex", index);
+            });
+
+            Button btn = slotObj.GetComponent<Button>() ?? slotObj.GetComponentInChildren<Button>();
+
+            if (btn != null)
+            {
+                HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slotObj, binder =>
+                {
+                    binder.Bind("mainButton", btn);
+                });
+
+                var backingItem = UdonSharpEditorUtility.GetBackingUdonBehaviour(item);
+                if (backingItem != null)
+                {
+                    UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
+                        btn.onClick,
+                        backingItem.SendCustomEvent,
+                        "OnClick"
+                    );
+                }
+            }
+
+            return item;
+        }
+
+        /// <summary>
+        /// Pushes the created slots into the DataGrid manager.
+        /// </summary>
+        private static void ConfigureGridManager(GameObject gridObj, HorizonDataGrid manager, List<HorizonSmartSlot> slots, int poolSize)
+        {
+            HorizonGUIFactory.ConfigureLogic<HorizonDataGrid>(gridObj, binder =>
+            {
+                binder.BindArray("slotPool", slots);
+                binder.BindVal("itemsPerPage", poolSize);
+            });
+        }
+
+        /// <summary>
+        /// Recursively scans a slot instance for components with 'u-bind' and populates the SmartSlot arrays.
+        /// </summary>
+        private static void BakeSmartSlotBindings(GameObject root, HorizonSmartSlot slot, bool isTemplated)
+        {
+            var textKeys = new List<string>();
+            var textTargets = new List<TextMeshProUGUI>();
+            var imgKeys = new List<string>();
+            var imgTargets = new List<Image>();
+
+            if (!isTemplated)
+            {
+                var txt = root.GetComponentInChildren<TextMeshProUGUI>();
+                if (txt) { textKeys.Add("MainText"); textTargets.Add(txt); }
+
+                var imgs = root.GetComponentsInChildren<Image>();
+                foreach (var img in imgs)
+                {
+                    if (img.gameObject != root)
+                    {
+                        imgKeys.Add("MainIcon"); imgTargets.Add(img);
+                        break;
+                    }
+                }
+            }
+            else
+            {
+                var allTransforms = root.GetComponentsInChildren<Transform>(true);
+                foreach (var tr in allTransforms)
+                {
+                    string name = tr.name;
+                    if (name.Contains("__BIND__"))
+                    {
+                        string[] parts = name.Split(new string[] { "__BIND__" }, System.StringSplitOptions.None);
+                        if (parts.Length < 2) continue;
+
+                        string key = parts[1];
+
+                        var txt = tr.GetComponent<TextMeshProUGUI>();
+                        if (txt != null)
+                        {
+                            textKeys.Add(key);
+                            textTargets.Add(txt);
+                        }
+
+                        var img = tr.GetComponent<Image>();
+                        if (img != null)
+                        {
+                            imgKeys.Add(key);
+                            imgTargets.Add(img);
+                        }
+
+                        tr.name = parts[0];
+                    }
+                }
+            }
+
+            HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slot.gameObject, binder =>
+            {
+                binder.BindArray("textKeys", textKeys);
+                binder.BindArray("textTargets", textTargets);
+                binder.BindArray("imageKeys", imgKeys);
+                binder.BindArray("imageTargets", imgTargets);
+            });
         }
 
         /// <summary>

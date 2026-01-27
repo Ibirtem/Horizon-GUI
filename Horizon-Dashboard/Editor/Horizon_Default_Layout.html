@@ -36,8 +36,14 @@
             <div class="module-page" h-view="Main:Home" u-bind="Home_View">
                 <text class="dim-text" u-bind="Home_InfoText">Loading...</text>
                 <hr />
-                <h-grid id="PlayerGrid" style="circle" pool="64" cell-w="64" cell-h="64" spacing="15"
-                    u-bind="Home_PlayerGrid" u-click="OnPlayerSlotClicked"></h-grid>
+                <h-grid id="PlayerGrid" class="player-grid" pool="64" spacing="15" u-bind="Home_PlayerGrid"
+                    u-click="OnPlayerSlotClicked">
+
+                    <button class="player-slot" u-bind="mainButton">
+                        <img class="player-avatar" u-bind="MainIcon" src="user_placeholder.png" />
+                    </button>
+
+                </h-grid>
             </div>
 
             <!-- WEATHER MODULE -->
