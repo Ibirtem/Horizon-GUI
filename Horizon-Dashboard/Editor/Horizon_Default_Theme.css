@@ -150,6 +150,11 @@ toggle {
     flex-grow: 1;
 }
 
+.link-row icon {
+    width: 48px;
+    height: 48px;
+}
+
 /* --- OVERLAYS --- */
 .modal-window {
     width: 500px;

@@ -828,6 +828,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             bgImg.color = new Color(1, 1, 1, 0.1f);
             bgImg.sprite = GetOrGenerateRoundedSprite();
             bgImg.raycastTarget = true;
+            bgImg.pixelsPerUnitMultiplier = 64f / 3f;
 
             RectTransform bgRect = bgObj.GetComponent<RectTransform>();
             bgRect.anchorMin = new Vector2(0, 0.5f);
@@ -842,6 +843,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             hImg.color = Color.white;
             hImg.sprite = GetOrGenerateRoundedSprite();
             hImg.raycastTarget = true;
+            hImg.pixelsPerUnitMultiplier = 64f / 20f;
 
             RectTransform hRect = handle.GetComponent<RectTransform>();
             hRect.sizeDelta = new Vector2(40, 0);

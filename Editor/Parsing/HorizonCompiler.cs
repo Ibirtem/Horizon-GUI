@@ -834,6 +834,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         /// </summary>
         private static GameObject BuildRangeInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
         {
+            if (styles.ContainsKey("background-color")) styles.Remove("background-color");
+
             float min = ParseFloat(node.Attributes, "min", 0f);
             float max = ParseFloat(node.Attributes, "max", 1f);
             float val = ParseFloat(node.Attributes, "value", 0f);
@@ -1018,6 +1020,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             Image bgImg = bgObj.GetComponent<Image>();
             bgImg.color = new Color(1, 1, 1, 0.1f);
             bgImg.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+            bgImg.pixelsPerUnitMultiplier = 64f / 20f;
 
             HorizonGUIFactory.SetLayoutSize(bgObj, 40, 40, 40, 40);
             bgImg.raycastTarget = true;
@@ -1149,10 +1152,15 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                         // 2. Determine Dimensions
                         RectTransform rt = go.GetComponent<RectTransform>();
-                        float w = rt.rect.width;
-                        float h = rt.rect.height;
-                        if (w <= 1) w = ParseFloat(styles, "width", 100);
-                        if (h <= 1) h = ParseFloat(styles, "height", 100);
+
+                        float w = ParseFloat(styles, "width", -1);
+                        float h = ParseFloat(styles, "height", -1);
+
+                        if (w <= 0) w = rt.rect.width;
+                        if (h <= 0) h = rt.rect.height;
+
+                        if (w <= 1) w = 100;
+                        if (h <= 1) h = 100;
 
                         float minSide = Mathf.Min(w, h);
                         float maxPossibleRadius = minSide / 2f;
@@ -1192,6 +1200,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             // --- Layout & Padding Logic ---
 
             bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
+
             float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
 
             int pAll = (int)ParseFloat(styles, "padding", 0);
@@ -1248,6 +1257,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 glg.spacing = new Vector2(spacing, spacing);
             }
         }
+
         /// <summary>
         /// Applies LayoutElement properties (width, height, flex-grow) to the GameObject.
         /// Handles 'ignore-layout' for overlay positioning.
