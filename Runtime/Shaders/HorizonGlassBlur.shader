@@ -48,6 +48,8 @@ Shader "Horizon/UI/Glass Blur"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma fragmentoption ARB_precision_hint_fastest
+            
             #include "UnityCG.cginc"
             #include "UnityUI.cginc"
 
@@ -62,17 +64,20 @@ Shader "Horizon/UI/Glass Blur"
             {
                 float4 vertex   : SV_POSITION;
                 fixed4 color    : COLOR;
-                float2 texcoord  : TEXCOORD0;
-                float4 grabPos   : TEXCOORD1;
+                float2 texcoord : TEXCOORD0;
+                float4 grabPos  : TEXCOORD1;
                 float4 worldPosition : TEXCOORD2;
             };
 
             sampler2D _MainTex;
             fixed4 _Color;
             sampler2D _BackgroundTexture;
-            float4 _BackgroundTexture_TexelSize;
+            half4 _BackgroundTexture_TexelSize;
             float _BlurSize;
             float4 _ClipRect;
+
+            static const float GOLDEN_ANGLE = 2.39996323;
+            static const int ITERATIONS = 12;
 
             v2f vert(appdata_t v)
             {
@@ -87,34 +92,35 @@ Shader "Horizon/UI/Glass Blur"
 
             half4 frag(v2f IN) : SV_Target
             {
-                half4 blurredCol = float4(0,0,0,0);
-                float2 offset = _BackgroundTexture_TexelSize.xy * _BlurSize;
+                float2 screenUV = IN.grabPos.xy / IN.grabPos.w;
+
+                float2 texelSize = _BackgroundTexture_TexelSize.xy;
                 
-                // 3x3 Box/Gaussian Hybrid Kernel
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos) * 0.22;
+                half4 accumColor = 0;
+                
+                float2x2 rot = float2x2(cos(GOLDEN_ANGLE), sin(GOLDEN_ANGLE), -sin(GOLDEN_ANGLE), cos(GOLDEN_ANGLE));
 
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(offset.x, 0, 0, 0)) * 0.13;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(-offset.x, 0, 0, 0)) * 0.13;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(0, offset.y, 0, 0)) * 0.13;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(0, -offset.y, 0, 0)) * 0.13;
+                float2 direction = float2(_BlurSize, 0.0);
+                
+                UNITY_UNROLL
+                for (int i = 0; i < ITERATIONS; i++)
+                {
+                    float r = sqrt((float)i) / sqrt((float)ITERATIONS);
+                    
+                    direction = mul(rot, direction);
+                    
+                    float2 offset = direction * r * texelSize;
+                    
+                    accumColor += tex2D(_BackgroundTexture, screenUV + offset);
+                }
+                
+                accumColor /= (float)ITERATIONS;
 
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(offset.x, offset.y, 0, 0)) * 0.065;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(-offset.x, -offset.y, 0, 0)) * 0.065;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(offset.x, -offset.y, 0, 0)) * 0.065;
-                blurredCol += tex2Dproj(_BackgroundTexture, IN.grabPos + float4(-offset.x, offset.y, 0, 0)) * 0.065;
-
-                half4 sharpCol = tex2Dproj(_BackgroundTexture, IN.grabPos);
-
-                float depthFactor = smoothstep(0.0, 1.0, IN.grabPos.w);
-
-                float mixFactor = lerp(0.4, 1.0, depthFactor);
-
-                half4 bgResult = lerp(sharpCol, blurredCol, mixFactor);
-
+                half4 finalColor = lerp(accumColor, IN.color, IN.color.a);
+                
                 half4 mainTex = tex2D(_MainTex, IN.texcoord);
-                half4 finalColor = lerp(bgResult, IN.color, IN.color.a);
-                
                 finalColor.a = mainTex.a; 
+                
                 finalColor.a *= UnityGet2DClipping(IN.worldPosition.xy, _ClipRect);
                 
                 return finalColor;
