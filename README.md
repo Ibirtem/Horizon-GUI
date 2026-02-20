@@ -1,85 +1,102 @@
-# Horizon GUI 🎨
+# Horizon GUI
 
-**A modular toolkit for building interfaces in VRChat.**
+*(Screenshot of the Dashboard... Wait, where?)*
 
-Horizon is a system designed to bridge the gap between Udon code and visual UI elements. It helps you construct responsive menus, bind scripts automatically, and manage styles without getting lost in the Unity hierarchy.
+**A web-like UI framework for VRChat.**
 
----
+Horizon is designed to streamline the UI development process in VRChat. It allows you to build complex, responsive menus using familiar (Maybe...) **HTML and CSS**, while automating the tedious parts of development—such as layout management, collider setup, and script binding.
 
-## Key Features
-
-- **Markup-Based Workflow**
-  Define your UI structure using familiar **HTML** and style it with **CSS**.
-
-- **CSS Styling**
-  A centralized styling system. Change colors, spacing, and fonts in a standard `.css` file, and the entire UI updates upon rebuild.
-
-- **Auto-Discovery & Direct Binding**
-  Place your UdonSharp logic scripts within the UI System's hierarchy. Horizon automatically finds them and links UI components to your C# variables by matching names (e.g., `u-bind="MyButton"` links to `public Button MyButton;`).
-
-- **Editor-Time Events**
-  Implement an `OnHorizonBuild()` method in your scripts to run code immediately after the UI is compiled, perfect for baking version numbers or setting initial states.
-
-- **Glassmorphism**
-  Includes a lightweight background blur shader optimized for VR.
+It ships as two parts:
+1. **The Core Framework**: A compiler that translates markup into optimized Unity UI and wires up UdonSharp events.
+2. **The Dashboard**: A fully functional, out-of-the-box UI template (sidebar, player grids, modals) that serves as a practical example of the framework's capabilities.
 
 ---
 
-## Quick Start
+## ⚡ Why use Horizon?
 
-1.  **Create the System:**
-    Right-click in the Hierarchy: `GameObject -> Horizon -> Create UI System`.
-2.  **Initialize (Optional):**
-    Select the created object. In the Inspector, click **"Initialize Dashboard Environment"** to generate default templates and logic scripts.
-3.  **Build:**
-    Click the **"COMPILE INTERFACE"** button. The system will construct the Canvas, layout, and link all Udon scripts automatically.
+*   **HTML & CSS Workflow:** Write your layout in `.html` and style it in `.css`. The compiler handles the layout groups, spacing, and rounding. It's pure web-like development inside Unity.
+*   **Zero-Friction Binding:** Forget dragging references in the inspector. Tag an element with `u-bind="MyVar"` in HTML, and the system automatically links it to the `MyVar` field in your C# script during compilation.
+*   **Pre-baked UI Systems:** Includes high-level logic out of the box. `<h-grid pool="64">` automatically creates a fixed object pool for player lists or inventories, while `h-view` and `h-change` attributes automate menu navigation without extra code.
+*   **Built for VRChat:** It generates pure Unity UI with `VRCUiShape` components and colliders attached. No runtime parsing tax — the final output is zero-overhead, optimized GameObjects.
+
+## 🚀 Quick Start
+
+1. Right-click anywhere in your scene hierarchy and select `GameObject -> Horizon -> Create UI System`.
+2. Select the newly created **Horizon UI System** object.
+3. In the Inspector, click **"Initialize Dashboard Environment"**. This unpacks the default HTML/CSS templates and spawns the example logic scripts.
+4. Hit **"COMPILE INTERFACE"**. Watch the hierarchy populate with a fully built, styled, and wired Canvas.
 
 ---
 
-## Workflow Example
+## 💡 How it works (The Workflow)
 
-Horizon links your HTML layout to your UdonSharp code through a simple name-matching system.
+Write your layout, write your logic, and let Horizon connect them. Here is a simple Audio Settings example.
 
-**1. Define the UI in HTML**
-
-Use `u-bind` to mark elements that your scripts will interact with, and `u-click` to specify which method to call on an event.
+**1. The Layout (`.html`)**
+Notice how we handle routing (`h-change`/`h-view`) and C# bindings (`u-bind`/`u-click`) directly in the markup.
 
 ```html
-<!-- A view for weather controls -->
-<div class="weather-panel" u-bind="Weather_View">
-  <h1>Weather Control</h1>
-  <hr />
+<!-- Navigation Button -->
+<button class="tab-btn" h-change="Main:Audio">Audio Settings</button>
 
-  <!-- This button will call the "ToggleRain" method in your C# script -->
-  <button u-click="ToggleRain">
-    <icon src="cloud_rain.png" />
-  </button>
+<!-- The actual page view -->
+<div class="page-content" h-view="Main:Audio">
+    <h2>Volume Control</h2>
+    <hr />
 
-  <!-- This slider will be linked to a C# variable named "Weather_TimeSlider" -->
-  <input type="range" min="0" max="1" u-bind="Weather_TimeSlider" />
+    <div class="row">
+        <!-- Calls ToggleMute() on click -->
+        <button class="icon-btn" u-click="ToggleMute">
+            <icon src="speaker_icon.png" />
+        </button>
+
+        <!-- Binds to the C# VolumeSlider variable and calls OnVolumeChange() -->
+        <input type="range" min="0" max="1" u-bind="VolumeSlider" u-click="OnVolumeChange" />
+    </div>
+
+    <!-- Binds to the C# StatusText variable -->
+    <text class="dim-text" u-bind="StatusText">Volume: 100%</text>
 </div>
 ```
 
-**2. Write the Logic in C#**
-
-Create a GameObject inside your `Horizon UI System` (e.g., "Logic_Weather") and attach this UdonSharp script to it.
+**2. The Logic (`.cs`)**
+Drop this script anywhere inside your Horizon UI System object. When you hit "Compile", Horizon scans its children, finds this script, and injects the UI references automatically.
 
 ```csharp
-// HorizonGUI_WeatherModule.cs
-public class HorizonGUI_WeatherModule : UdonSharpBehaviour
-{
-    // These variables are filled automatically by the compiler
-    // because their names match the 'u-bind' attributes in the HTML.
-    public GameObject Weather_View;
-    public Slider Weather_TimeSlider;
+using UdonSharp;
+using UnityEngine.UI;
+using TMPro;
+using UnityEngine;
 
-    // This method is called by the button with 'u-click="ToggleRain"'
-    public void ToggleRain()
+public class AudioSettingsModule : UdonSharpBehaviour
+{
+    // Automatically populated by the compiler thanks to 'u-bind'
+    public Slider VolumeSlider;
+    public TextMeshProUGUI StatusText;
+
+    // Optional: Called by the compiler in the Editor right after building the UI.
+    // Great for baking default states or version numbers before uploading!
+    public void OnHorizonBuild()
     {
-        Debug.Log("Rain toggled!");
-        Debug.Log("Current time from slider: " + Weather_TimeSlider.value);
+        VolumeSlider.value = 1f;
+        StatusText.text = "Volume: 100%";
+    }
+
+    public void ToggleMute()
+    {
+        VolumeSlider.value = 0f;
+        UpdateStatus();
+    }
+
+    public void OnVolumeChange()
+    {
+        UpdateStatus();
+    }
+
+    private void UpdateStatus()
+    {
+        int percent = Mathf.RoundToInt(VolumeSlider.value * 100);
+        StatusText.text = $"Volume: {percent}%";
     }
 }
 ```
-
-When you press **"COMPILE INTERFACE"**, Horizon finds your script, matches the variable names to the `u-bind` attributes in the HTML, and links them for you.
