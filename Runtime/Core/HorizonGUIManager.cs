@@ -1,7 +1,7 @@
 using UnityEngine;
 using TMPro;
 using UdonSharp;
-using VRC.Udon; // Добавляем using для доступа к SendCustomEvent
+using VRC.Udon;
 
 namespace BlackHorizon.HorizonGUI
 {

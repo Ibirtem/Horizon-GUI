@@ -4,7 +4,9 @@ using UnityEngine.UI;
 using BlackHorizon.HorizonGUI.Editor;
 using BlackHorizon.HorizonGUI.Editor.Parsing;
 using UdonSharp;
+using System.Reflection;
 using System.Collections.Generic;
+using BlackHorizon.HorizonGUI.Services;
 
 namespace BlackHorizon.HorizonGUI
 {
@@ -76,7 +78,6 @@ namespace BlackHorizon.HorizonGUI
 
             EditorGUILayout.Space(2);
 
-            // THE MISSING BUTTON
             GUI.backgroundColor = new Color(0.8f, 1f, 0.8f);
             if (GUILayout.Button("Initialize Dashboard Environment", GUILayout.Height(30)))
             {
@@ -135,7 +136,11 @@ namespace BlackHorizon.HorizonGUI
 
             // --- LOGIC DISCOVERY PHASE ---
             List<UdonSharpBehaviour> logicScripts = CollectLogicScripts(authoring);
-            Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{logicScripts.Count}</b> logic scripts for binding.");
+            Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{logicScripts.Count}</b> logic scripts.");
+
+            HorizonAvatarManager avatarService = HorizonGUIFactory.EnsureAvatarService(authoring.gameObject);
+
+            InjectService(logicScripts, avatarService);
 
             var manager = authoring.GetComponent<HorizonGUIManager>();
             if (manager != null)
@@ -160,6 +165,43 @@ namespace BlackHorizon.HorizonGUI
             else
             {
                 Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoring.name}' completed successfully.");
+            }
+        }
+
+        /// <summary>
+        /// Scans all logic scripts for fields of type HorizonAvatarManager and assigns the singleton instance.
+        /// </summary>
+        private void InjectService(List<UdonSharpBehaviour> scripts, HorizonAvatarManager service)
+        {
+            if (service == null) return;
+
+            foreach (var script in scripts)
+            {
+                if (script == null) continue;
+
+                SerializedObject so = new SerializedObject(script);
+                SerializedProperty prop = so.GetIterator();
+                bool found = false;
+
+                while (prop.NextVisible(true))
+                {
+                    if (prop.propertyType == SerializedPropertyType.ObjectReference)
+                    {
+                        var field = script.GetType().GetField(prop.name,
+                            BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+
+                        if (field != null && field.FieldType == typeof(HorizonAvatarManager))
+                        {
+                            prop.objectReferenceValue = service;
+                            found = true;
+                        }
+                    }
+                }
+
+                if (found)
+                {
+                    so.ApplyModifiedProperties();
+                }
             }
         }
 

@@ -33,6 +33,12 @@ namespace BlackHorizon.HorizonGUI
         [Tooltip("Variable name in target to store the Item ID.")]
         public string targetVariableInt = "_lastEventInt";
 
+        [Header("Callbacks")]
+        [Tooltip("Optional: External behaviour to notify when the view refreshes (pagination/load).")]
+        public UdonBehaviour viewUpdateListener;
+        [Tooltip("Event name to call on the listener.")]
+        public string onViewUpdateEvent = "OnGridViewUpdated";
+
         private const string DEFAULT_TEXT_KEY = "MainText";
         private const string DEFAULT_ICON_KEY = "MainIcon";
 
@@ -72,6 +78,9 @@ namespace BlackHorizon.HorizonGUI
             RefreshView();
         }
 
+        /// <summary>
+        /// Refreshes the visual state of the slots based on current data and page.
+        /// </summary>
         public void RefreshView()
         {
             if (slotPool == null) return;
@@ -92,9 +101,7 @@ namespace BlackHorizon.HorizonGUI
                     item.currentDataId = _dataIds[dataIndex];
 
                     if (_dataNames != null && dataIndex < _dataNames.Length)
-                    {
                         item.SetText(DEFAULT_TEXT_KEY, _dataNames[dataIndex]);
-                    }
 
                     Sprite icon = null;
                     if (_dataIcons != null && dataIndex < _dataIcons.Length)
@@ -109,6 +116,11 @@ namespace BlackHorizon.HorizonGUI
             }
 
             UpdatePaginationControls();
+
+            if (viewUpdateListener != null && !string.IsNullOrEmpty(onViewUpdateEvent))
+            {
+                viewUpdateListener.SendCustomEvent(onViewUpdateEvent);
+            }
         }
 
         public void OnItemClicked(int slotIndex, int dataId)

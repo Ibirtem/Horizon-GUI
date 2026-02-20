@@ -3,6 +3,7 @@ using TMPro;
 using VRC.SDKBase;
 using UdonSharp;
 using VRC.Udon;
+using BlackHorizon.HorizonGUI.Services;
 
 namespace BlackHorizon.HorizonGUI
 {
@@ -17,6 +18,12 @@ namespace BlackHorizon.HorizonGUI
         public TextMeshProUGUI Home_InfoText;
         public HorizonDataGrid Home_PlayerGrid;
 
+        [Header("Debug")]
+        public bool debugMode = false;
+
+        [Header("Services")]
+        public HorizonAvatarManager avatarManager;
+
         /// <summary>
         /// ID received from the Grid when a slot is clicked.
         /// </summary>
@@ -28,6 +35,12 @@ namespace BlackHorizon.HorizonGUI
         public void OnHorizonBuild()
         {
             if (Home_InfoText != null) Home_InfoText.text = "System Ready (Baked)";
+
+            if (Home_PlayerGrid != null)
+            {
+                Home_PlayerGrid.viewUpdateListener = this.GetComponent<UdonBehaviour>();
+                Home_PlayerGrid.onViewUpdateEvent = "OnGridViewUpdated";
+            }
         }
 
         private void OnEnable()
@@ -97,8 +110,33 @@ namespace BlackHorizon.HorizonGUI
         }
 
         /// <summary>
-        /// Called via Custom Event by playerGrid when a slot is clicked.
+        /// Called by HorizonDataGrid whenever it refreshes (LoadData or Pagination).
         /// </summary>
+        public void OnGridViewUpdated()
+        {
+            if (Home_PlayerGrid == null || avatarManager == null) return;
+
+            HorizonSmartSlot[] slots = Home_PlayerGrid.slotPool;
+            if (slots == null) return;
+
+            for (int i = 0; i < slots.Length; i++)
+            {
+                if (!slots[i].gameObject.activeSelf)
+                {
+                    avatarManager.ClearRequest(i);
+                    continue;
+                }
+
+                int playerId = slots[i].currentDataId;
+
+                avatarManager.RegisterRequest(i, playerId, true);
+
+                Texture t = avatarManager.GetTexture(i);
+                slots[i].SetRawTexture("AvatarRaw", t);
+                slots[i].SetImage("MainIcon", null);
+            }
+        }
+
         public void OnPlayerSlotClicked()
         {
             int playerId = _lastEventInt;

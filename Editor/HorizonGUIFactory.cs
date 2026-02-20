@@ -7,6 +7,7 @@ using System.IO;
 using VRC.SDK3.Components;
 using UdonSharpEditor;
 using BlackHorizon.HorizonGUI;
+using BlackHorizon.HorizonGUI.Services;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
@@ -254,6 +255,86 @@ namespace BlackHorizon.HorizonGUI.Editor
             }
 
             return sprite;
+        }
+
+        /// <summary>
+        /// Checks if the Avatar Manager Service exists in the hierarchy. 
+        /// If not, procedural generation builds the service and configures a dedicated 
+        /// isolated camera for "Photobooth" capturing of player avatars.
+        /// </summary>
+        /// <param name="systemRoot">The parent Horizon UI System object.</param>
+        /// <returns>The attached HorizonAvatarManager component.</returns>
+        public static HorizonAvatarManager EnsureAvatarService(GameObject systemRoot)
+        {
+            string serviceName = "Service_AvatarManager";
+            Transform existingTr = systemRoot.transform.Find(serviceName);
+
+            HorizonAvatarManager manager = null;
+            GameObject serviceObj = null;
+
+            if (existingTr != null)
+            {
+                serviceObj = existingTr.gameObject;
+                manager = serviceObj.GetComponent<HorizonAvatarManager>();
+                if (manager == null) manager = AttachLogic<HorizonAvatarManager>(serviceObj);
+            }
+            else
+            {
+                serviceObj = new GameObject(serviceName);
+                serviceObj.transform.SetParent(systemRoot.transform, false);
+                manager = AttachLogic<HorizonAvatarManager>(serviceObj);
+                Undo.RegisterCreatedObjectUndo(serviceObj, "Create Avatar Service");
+            }
+
+            SerializedObject so = new SerializedObject(manager);
+            SerializedProperty camProp = so.FindProperty("photoCamera");
+
+            Camera cam = null;
+            if (camProp != null && camProp.objectReferenceValue != null)
+            {
+                cam = (Camera)camProp.objectReferenceValue;
+            }
+
+            if (cam == null)
+            {
+                Transform camTr = serviceObj.transform.Find("Avatar_Photobooth_Camera");
+                if (camTr != null)
+                {
+                    cam = camTr.GetComponent<Camera>();
+                }
+                else
+                {
+                    GameObject camObj = new GameObject("Avatar_Photobooth_Camera");
+                    camObj.transform.SetParent(serviceObj.transform, false);
+                    cam = camObj.AddComponent<Camera>();
+
+                    Undo.RegisterCreatedObjectUndo(camObj, "Create Photobooth Camera");
+                }
+
+                cam.enabled = false;
+                cam.clearFlags = CameraClearFlags.Skybox;
+                cam.nearClipPlane = 0.05f;
+                cam.farClipPlane = 50f;
+
+                int mask = 0;
+                mask |= (1 << LayerMask.NameToLayer("Default"));
+                if (LayerMask.NameToLayer("Player") != -1) mask |= (1 << LayerMask.NameToLayer("Player"));
+                if (LayerMask.NameToLayer("PlayerLocal") != -1) mask |= (1 << LayerMask.NameToLayer("PlayerLocal"));
+                if (LayerMask.NameToLayer("MirrorReflection") != -1) mask |= (1 << LayerMask.NameToLayer("MirrorReflection"));
+
+                if (mask == 0 || mask == 1) mask = -1;
+                cam.cullingMask = mask;
+            }
+
+            ConfigureLogic<HorizonAvatarManager>(serviceObj, b =>
+            {
+                b.Bind("photoCamera", cam);
+                b.BindVal("avatarLayers", cam.cullingMask);
+                b.BindVal("poolSize", 16);
+                b.BindVal("resolution", 256);
+            });
+
+            return manager;
         }
 
         #endregion

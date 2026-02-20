@@ -140,7 +140,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 case "icon":
                 case "img":
-                    createdObj = BuildIcon(node, parent, styles, _activeResourceMap);
+                    bool isRaw = node.Attributes.ContainsKey("raw");
+                    createdObj = BuildIcon(node, parent, styles, _activeResourceMap, isRaw);
                     break;
 
                 case "view":
@@ -750,6 +751,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             var textTargets = new List<TextMeshProUGUI>();
             var imgKeys = new List<string>();
             var imgTargets = new List<Image>();
+            var rawKeys = new List<string>();
+            var rawTargets = new List<RawImage>();
 
             if (!isTemplated)
             {
@@ -762,6 +765,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     if (img.gameObject != root)
                     {
                         imgKeys.Add("MainIcon"); imgTargets.Add(img);
+                        break;
+                    }
+                }
+
+                var raws = root.GetComponentsInChildren<RawImage>();
+                foreach (var raw in raws)
+                {
+                    if (raw.gameObject != root)
+                    {
+                        rawKeys.Add("MainRaw"); rawTargets.Add(raw);
                         break;
                     }
                 }
@@ -793,6 +806,13 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                             imgTargets.Add(img);
                         }
 
+                        var raw = tr.GetComponent<RawImage>();
+                        if (raw != null)
+                        {
+                            rawKeys.Add(key);
+                            rawTargets.Add(raw);
+                        }
+
                         tr.name = parts[0];
                     }
                 }
@@ -804,6 +824,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 binder.BindArray("textTargets", textTargets);
                 binder.BindArray("imageKeys", imgKeys);
                 binder.BindArray("imageTargets", imgTargets);
+                binder.BindArray("rawKeys", rawKeys);
+                binder.BindArray("rawTargets", rawTargets);
             });
         }
 
@@ -1041,28 +1063,49 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         }
 
         /// <summary>
-        /// Constructs an icon or image element.
+        /// Constructs an icon, image, or raw-image element.
         /// </summary>
-        private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles, HorizonResourceMap resourceMap)
+        private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles, HorizonResourceMap resourceMap, bool isRaw)
         {
             GameObject go = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
-            Image img = go.AddComponent<Image>();
-            img.raycastTarget = false;
-            img.preserveAspect = true;
 
-            if (node.Attributes.TryGetValue("src", out string src))
+            if (isRaw)
             {
-                img.sprite = HorizonGUIFactory.LoadSprite(src, resourceMap);
+                RawImage img = go.AddComponent<RawImage>();
+                img.raycastTarget = false;
+                img.color = Color.white;
 
-                if (img.sprite != null) img.color = Color.white;
-                else
+                Shader s = Shader.Find("Horizon/UI/Rounded RawImage");
+                if (s != null) img.material = new Material(s);
+            }
+            else
+            {
+                Image img = go.AddComponent<Image>();
+                img.raycastTarget = false;
+                img.preserveAspect = true;
+
+                if (node.Attributes.TryGetValue("src", out string src))
                 {
-                    img.color = Color.magenta;
+                    img.sprite = HorizonGUIFactory.LoadSprite(src, resourceMap);
+                    if (img.sprite != null) img.color = Color.white;
+                    else img.color = Color.magenta;
                 }
             }
 
-            HorizonGUIFactory.SetLayoutSize(go, 32, 32, 32, 32);
+            float w = ParseFloat(styles, "width", -1);
+            float h = ParseFloat(styles, "height", -1);
+
+            if (w > 0 || h > 0)
+            {
+                HorizonGUIFactory.SetLayoutSize(go,
+                    minW: w > 0 ? w : (float?)null,
+                    minH: h > 0 ? h : (float?)null,
+                    prefW: w > 0 ? w : (float?)null,
+                    prefH: h > 0 ? h : (float?)null);
+            }
+
             ApplyLayoutStyles(go, styles, node);
+
             return go;
         }
 
@@ -1146,7 +1189,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 }
             }
 
-            // --- Layout & Padding Logic (Unchanged) ---
+            // --- Layout & Padding Logic ---
 
             bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
             float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
@@ -1213,15 +1256,14 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         {
             if (node != null && node.Attributes.ContainsKey("ignore-layout"))
             {
-                LayoutElement le = go.AddComponent<LayoutElement>();
+                LayoutElement le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
                 le.ignoreLayout = true;
-
-                HorizonGUIFactory.Stretch(go);
 
                 RectTransform rt = go.GetComponent<RectTransform>();
                 rt.anchorMin = Vector2.zero;
                 rt.anchorMax = Vector2.one;
-                rt.sizeDelta = Vector2.zero;
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
                 return;
             }
 
