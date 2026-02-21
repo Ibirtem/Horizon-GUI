@@ -125,7 +125,7 @@ namespace BlackHorizon.HorizonGUI.Services
             return _texturePool[slotIndex];
         }
 
-        private void LateUpdate()
+        public override void PostLateUpdate()
         {
             if (photoCamera == null) return;
 
@@ -200,10 +200,22 @@ namespace BlackHorizon.HorizonGUI.Services
             }
 
             VRCPlayerApi.TrackingData headData = player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-            Vector3 headPos = headData.position;
+            Vector3 viewPos = headData.position;
             Quaternion headRot = headData.rotation;
 
-            if (headPos.sqrMagnitude < 0.01f)
+            Vector3 bonePos = player.GetBonePosition(HumanBodyBones.Head);
+            Vector3 targetFacePos;
+
+            if (bonePos == Vector3.zero)
+            {
+                targetFacePos = viewPos;
+            }
+            else
+            {
+                targetFacePos = Vector3.Lerp(bonePos, viewPos, 0.5f);
+            }
+
+            if (targetFacePos == Vector3.zero)
             {
                 photoCamera.clearFlags = CameraClearFlags.SolidColor;
                 photoCamera.backgroundColor = new Color(0, 0, 0, 0);
@@ -215,12 +227,17 @@ namespace BlackHorizon.HorizonGUI.Services
                 return;
             }
 
-            // 0.6m in front of the face
-            Vector3 offset = headRot * Vector3.forward * 0.6f;
-            Vector3 cameraPos = headPos + offset;
+            float avatarHeight = Vector3.Distance(player.GetPosition(), viewPos);
+
+            if (avatarHeight < 0.2f) avatarHeight = 1.6f;
+
+            float cameraDistance = avatarHeight * 0.35f;
+
+            Vector3 offset = headRot * Vector3.forward * cameraDistance;
+            Vector3 cameraPos = targetFacePos + offset;
 
             photoCamera.transform.position = cameraPos;
-            photoCamera.transform.LookAt(headPos);
+            photoCamera.transform.LookAt(targetFacePos);
             photoCamera.nearClipPlane = 0.01f;
 
             photoCamera.targetTexture = _texturePool[index];
