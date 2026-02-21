@@ -9,13 +9,11 @@ namespace BlackHorizon.HorizonGUI
     {
         private SerializedProperty _modulesProp;
         private SerializedProperty _overlayContainerProp;
-        private SerializedProperty _clockTextProp;
 
         private void OnEnable()
         {
             _modulesProp = serializedObject.FindProperty("modules");
             _overlayContainerProp = serializedObject.FindProperty("overlayContainer");
-            _clockTextProp = serializedObject.FindProperty("clockText");
         }
 
         public override void OnInspectorGUI()
@@ -29,12 +27,6 @@ namespace BlackHorizon.HorizonGUI
             HorizonEditorUtils.DrawSectionHeader("SYSTEM REFERENCES");
             EditorGUILayout.PropertyField(_modulesProp, true);
             EditorGUILayout.PropertyField(_overlayContainerProp);
-
-            // 3. AUTO-BINDINGS
-            HorizonEditorUtils.DrawSectionHeader("BINDING TARGETS");
-            GUI.enabled = false;
-            EditorGUILayout.PropertyField(_clockTextProp);
-            GUI.enabled = true;
 
             serializedObject.ApplyModifiedProperties();
         }

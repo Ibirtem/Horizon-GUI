@@ -705,7 +705,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         /// <summary>
         /// Checks for an existing EventSystem in the scene. If none is found, creates a new one 
-        /// with a StandaloneInputModule to enable UI interactions.
+        /// prioritizing the new InputSystemUIInputModule, with a fallback to StandaloneInputModule.
         /// </summary>
         /// <param name="parent">The GameObject to host the new EventSystem if creation is required.</param>
         public static void EnsureEventSystemInside(GameObject parent)
@@ -716,10 +716,20 @@ namespace BlackHorizon.HorizonGUI.Editor
             esObj.transform.SetParent(parent.transform);
             esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
 
-            var input = esObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+            System.Type newModuleType = System.Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
 
-            input.horizontalAxis = "Horizontal";
-            input.verticalAxis = "Vertical";
+            if (newModuleType != null)
+            {
+                esObj.AddComponent(newModuleType);
+                Debug.Log("<color=#33FF33>[HorizonFactory]</color> Created System_Input using modern <b>InputSystemUIInputModule</b>.");
+            }
+            else
+            {
+                Debug.LogWarning("<color=yellow>[HorizonFactory]</color> Modern Input System package not found. Falling back to <b>StandaloneInputModule</b>. Consider migrating your project to the new Input System.");
+                var input = esObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
+                input.horizontalAxis = "Horizontal";
+                input.verticalAxis = "Vertical";
+            }
         }
 
         /// <summary>

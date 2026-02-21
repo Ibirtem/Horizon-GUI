@@ -18,11 +18,15 @@ namespace BlackHorizon.HorizonGUI
         public TextMeshProUGUI Home_InfoText;
         public HorizonDataGrid Home_PlayerGrid;
 
+        public TextMeshProUGUI clockText;
+
         [Header("Debug")]
         public bool debugMode = false;
 
         [Header("Services")]
         public HorizonAvatarManager avatarManager;
+
+        private float _lastClockUpdate;
 
         /// <summary>
         /// ID received from the Grid when a slot is clicked.
@@ -61,6 +65,12 @@ namespace BlackHorizon.HorizonGUI
 
         private void Update()
         {
+            if (clockText != null && Time.time - _lastClockUpdate > 1f)
+            {
+                clockText.text = System.DateTime.Now.ToString("dd MMMM, HH:mm");
+                _lastClockUpdate = Time.time;
+            }
+
             if (Time.frameCount % 120 == 0)
             {
                 UpdateInfo();

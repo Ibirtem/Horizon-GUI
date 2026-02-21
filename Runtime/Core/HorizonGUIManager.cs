@@ -19,10 +19,6 @@ namespace BlackHorizon.HorizonGUI
         [Tooltip("Global modal/overlay container.")]
         public GameObject overlayContainer;
 
-        [Header("Global Bindings")]
-        [Tooltip("Optional: Global clock text usually placed in the header.")]
-        public TextMeshProUGUI clockText;
-
         private int _currentTabIndex = 0;
 
         /// <summary>
@@ -33,14 +29,6 @@ namespace BlackHorizon.HorizonGUI
         private void Start()
         {
             OpenTab(0);
-        }
-
-        private void Update()
-        {
-            if (clockText != null)
-            {
-                clockText.text = System.DateTime.Now.ToString("dd MMMM, HH:mm");
-            }
         }
 
         #region Navigation Logic
@@ -63,14 +51,8 @@ namespace BlackHorizon.HorizonGUI
                 {
                     bool isActive = (i == index);
 
-                    if (isActive)
-                    {
-                        modules[i].SendCustomEvent("OnShow");
-                    }
-                    else
-                    {
-                        modules[i].SendCustomEvent("OnHide");
-                    }
+                    if (isActive) modules[i].SendCustomEvent("OnShow");
+                    else modules[i].SendCustomEvent("OnHide");
                 }
             }
         }
