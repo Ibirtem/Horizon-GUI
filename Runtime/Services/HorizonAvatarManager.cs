@@ -116,6 +116,11 @@ namespace BlackHorizon.HorizonGUI.Services
         /// </summary>
         public RenderTexture GetTexture(int slotIndex)
         {
+            if (_texturePool == null)
+            {
+                InitializePool();
+            }
+
             if (slotIndex < 0 || slotIndex >= poolSize) return null;
             return _texturePool[slotIndex];
         }

@@ -316,20 +316,22 @@ namespace BlackHorizon.HorizonGUI.Editor
                 cam.nearClipPlane = 0.05f;
                 cam.farClipPlane = 50f;
 
-                int mask = 0;
-                mask |= (1 << LayerMask.NameToLayer("Default"));
-                if (LayerMask.NameToLayer("Player") != -1) mask |= (1 << LayerMask.NameToLayer("Player"));
-                if (LayerMask.NameToLayer("PlayerLocal") != -1) mask |= (1 << LayerMask.NameToLayer("PlayerLocal"));
-                if (LayerMask.NameToLayer("MirrorReflection") != -1) mask |= (1 << LayerMask.NameToLayer("MirrorReflection"));
+                int avatarMask = 0;
 
-                if (mask == 0 || mask == 1) mask = -1;
-                cam.cullingMask = mask;
+                if (LayerMask.NameToLayer("Player") != -1) avatarMask |= (1 << LayerMask.NameToLayer("Player"));
+                if (LayerMask.NameToLayer("PlayerLocal") != -1) avatarMask |= (1 << LayerMask.NameToLayer("PlayerLocal"));
+                if (LayerMask.NameToLayer("MirrorReflection") != -1) avatarMask |= (1 << LayerMask.NameToLayer("MirrorReflection"));
+
+                if (avatarMask == 0) avatarMask = (1 << 9) | (1 << 10) | (1 << 18);
+
+                cam.cullingMask = avatarMask;
             }
 
             ConfigureLogic<HorizonAvatarManager>(serviceObj, b =>
             {
                 b.Bind("photoCamera", cam);
-                b.BindVal("avatarLayers", cam.cullingMask);
+                b.BindVal("avatarOnlyLayers", cam.cullingMask);
+                b.BindVal("fullEnvironmentLayers", -1);
                 b.BindVal("poolSize", 16);
                 b.BindVal("resolution", 256);
             });

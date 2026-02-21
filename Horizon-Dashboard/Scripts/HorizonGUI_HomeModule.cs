@@ -128,12 +128,19 @@ namespace BlackHorizon.HorizonGUI
                 }
 
                 int playerId = slots[i].currentDataId;
-
                 avatarManager.RegisterRequest(i, playerId, true);
 
                 Texture t = avatarManager.GetTexture(i);
-                slots[i].SetRawTexture("AvatarRaw", t);
-                slots[i].SetImage("MainIcon", null);
+
+                if (t != null)
+                {
+                    slots[i].SetRawTexture("AvatarRaw", t);
+                    slots[i].SetImage("MainIcon", null);
+                }
+                else
+                {
+                    slots[i].SetRawTexture("AvatarRaw", null);
+                }
             }
         }
 
