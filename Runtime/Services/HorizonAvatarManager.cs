@@ -170,12 +170,33 @@ namespace BlackHorizon.HorizonGUI.Services
             {
                 photoCamera.clearFlags = CameraClearFlags.SolidColor;
                 photoCamera.backgroundColor = new Color(0, 0, 0, 0);
-                photoCamera.cullingMask = avatarOnlyLayers;
+
+                if (player.isLocal)
+                {
+                    photoCamera.cullingMask = 1 << 18;
+                }
+                else
+                {
+                    photoCamera.cullingMask = 1 << 9;
+                }
             }
             else
             {
                 photoCamera.clearFlags = CameraClearFlags.Skybox;
-                photoCamera.cullingMask = fullEnvironmentLayers;
+                int mask = fullEnvironmentLayers;
+
+                if (player.isLocal)
+                {
+                    mask &= ~(1 << 10);
+                    mask |= (1 << 18);
+                }
+                else
+                {
+                    mask &= ~(1 << 18);
+                    mask |= (1 << 9);
+                }
+
+                photoCamera.cullingMask = mask;
             }
 
             VRCPlayerApi.TrackingData headData = player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
