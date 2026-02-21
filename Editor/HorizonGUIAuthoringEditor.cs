@@ -23,14 +23,14 @@ namespace BlackHorizon.HorizonGUI
 
         private SerializedProperty _htmlFileProp;
         private SerializedProperty _cssFileProp;
-        private SerializedProperty _backingLogicProp;
+        private SerializedProperty _resourceMapProp;
         private SerializedProperty _clearOnBuildProp;
 
         private void OnEnable()
         {
             _htmlFileProp = serializedObject.FindProperty("htmlFile");
             _cssFileProp = serializedObject.FindProperty("cssFile");
-            _backingLogicProp = serializedObject.FindProperty("backingLogic");
+            _resourceMapProp = serializedObject.FindProperty("resourceMap");
             _clearOnBuildProp = serializedObject.FindProperty("clearOnBuild");
         }
 
@@ -46,10 +46,16 @@ namespace BlackHorizon.HorizonGUI
             // 1. HEADER
             HorizonEditorUtils.DrawHorizonHeader("UI COMPILER", this);
 
-            // 2. RESOURCE MAP
-            SerializedProperty resMapProp = serializedObject.FindProperty("resourceMap");
-            EditorGUILayout.PropertyField(resMapProp);
-            if (resMapProp.objectReferenceValue == null)
+            // 2. TEMPLATES & RESOURCES
+            HorizonEditorUtils.DrawSectionHeader("TEMPLATES & RESOURCES");
+            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
+
+            EditorGUILayout.PropertyField(_htmlFileProp, new GUIContent("HTML Layout"));
+            EditorGUILayout.PropertyField(_cssFileProp, new GUIContent("CSS Styles"));
+            EditorGUILayout.Space(5);
+            EditorGUILayout.PropertyField(_resourceMapProp, new GUIContent("Resource Map"));
+
+            if (_resourceMapProp.objectReferenceValue == null)
             {
                 GUI.backgroundColor = new Color(1f, 0.8f, 0.8f);
                 if (GUILayout.Button("Auto-Create Resource Map"))
@@ -59,15 +65,9 @@ namespace BlackHorizon.HorizonGUI
                 }
                 GUI.backgroundColor = Color.white;
             }
-
-            // 3. TEMPLATE SOURCE
-            HorizonEditorUtils.DrawSectionHeader("TEMPLATE SOURCE");
-            EditorGUILayout.BeginVertical(EditorStyles.helpBox);
-            EditorGUILayout.PropertyField(_htmlFileProp, new GUIContent("HTML Layout"));
-            EditorGUILayout.PropertyField(_cssFileProp, new GUIContent("CSS Styles"));
             EditorGUILayout.EndVertical();
 
-            // 4. LOGIC & BINDING
+            // 3. LOGIC & BINDING
             HorizonEditorUtils.DrawSectionHeader("LOGIC & BINDING");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
@@ -79,7 +79,7 @@ namespace BlackHorizon.HorizonGUI
             EditorGUILayout.Space(2);
 
             GUI.backgroundColor = new Color(0.8f, 1f, 0.8f);
-            if (GUILayout.Button("Initialize Dashboard Environment", GUILayout.Height(30)))
+            if (GUILayout.Button("Setup Default Dashboard", GUILayout.Height(30)))
             {
                 if (EditorUtility.DisplayDialog("Horizon Setup",
                     "This will assign default templates AND create logic objects (Home, Weather, About) in this hierarchy.\n\nProceed?",
@@ -93,13 +93,13 @@ namespace BlackHorizon.HorizonGUI
 
             EditorGUILayout.EndVertical();
 
-            // 5. SETTINGS
+            // 4. SETTINGS
             HorizonEditorUtils.DrawSectionHeader("BUILD SETTINGS");
             EditorGUILayout.PropertyField(_clearOnBuildProp);
 
             EditorGUILayout.Space(15);
 
-            // 6. ACTION
+            // 5. ACTION
             GUI.backgroundColor = new Color(0.7f, 0.9f, 1f);
             if (GUILayout.Button("COMPILE INTERFACE", GUILayout.Height(40)))
             {
@@ -114,6 +114,8 @@ namespace BlackHorizon.HorizonGUI
 
             serializedObject.ApplyModifiedProperties();
         }
+
+        #region Core Build Logic
 
         /// <summary>
         /// Orchestrates the construction of the UI system.
@@ -341,5 +343,7 @@ namespace BlackHorizon.HorizonGUI
 
             HorizonGUIFactory.AddInteraction(canvasObj, rootRect.sizeDelta);
         }
+
+        #endregion
     }
 }
