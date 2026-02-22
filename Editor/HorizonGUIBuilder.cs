@@ -53,6 +53,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             CreateLogicModule(root, "Logic_Home", "HorizonGUI_HomeModule");
             CreateLogicModule(root, "Logic_Weather", "HorizonGUI_WeatherModule");
+            CreateLogicModule(root, "Logic_PostProcess", "HorizonGUI_PostProcessModule");
 
             EditorUtility.SetDirty(root);
 

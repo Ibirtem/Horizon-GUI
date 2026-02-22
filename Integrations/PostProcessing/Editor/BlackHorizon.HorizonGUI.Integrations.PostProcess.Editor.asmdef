@@ -1,0 +1,25 @@
+{
+    "name": "BlackHorizon.HorizonGUI.Integrations.PostProcess.Editor",
+    "rootNamespace": "BlackHorizon.HorizonGUI.Integrations.PostProcess.Editor",
+    "references": [
+        "BlackHorizon.HorizonGUI.Integrations.PostProcess",
+        "BlackHorizon.HorizonGUI.Runtime",
+        "BlackHorizon.HorizonGUI.Editor",
+        "UdonSharp.Runtime",
+        "UdonSharp.Editor",
+        "VRC.Udon",
+        "VRC.Udon.Editor",
+        "Unity.Postprocessing.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

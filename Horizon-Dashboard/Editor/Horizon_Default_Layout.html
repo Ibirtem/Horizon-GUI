@@ -6,6 +6,10 @@
             <icon src="house_with_garden.png" />
         </button>
 
+        <button class="nav-btn" h-change="Main:PostProcess">
+            <icon src="sparkles.png" />
+        </button>
+
         <button class="nav-btn" h-change="Main:Weather">
             <icon src="partly_sunny_rain.png" />
         </button>
@@ -24,6 +28,7 @@
         <div class="header-row">
             <h2 h-view="Main:Home">Dashboard</h2>
             <h2 h-view="Main:Weather">Weather Control</h2>
+            <h2 h-view="Main:PostProcess">Post Processing</h2>
             <h2 h-view="Main:About">About Horizon</h2>
 
             <div class="spacer"></div>
@@ -45,6 +50,19 @@
                     </button>
 
                 </h-grid>
+            </div>
+
+            <!-- POST PROCESSING MODULE -->
+            <div class="module-page" h-view="Main:PostProcess" u-bind="PP_View">
+                <scroll class="scroll-view">
+                    <div class="weather-controls">
+                        <label>Global Effects</label>
+                        <toggle u-bind="Toggle_Bloom" u-click="OnBloomChanged">Bloom (Glow)</toggle>
+                        <toggle u-bind="Toggle_AO" u-click="OnAOChanged">Ambient Occlusion</toggle>
+                        <toggle u-bind="Toggle_CA" u-click="OnCAChanged">Chromatic Aberration</toggle>
+                        <toggle u-bind="Toggle_Grain" u-click="OnGrainChanged">Film Grain</toggle>
+                    </div>
+                </scroll>
             </div>
 
             <!-- WEATHER MODULE -->

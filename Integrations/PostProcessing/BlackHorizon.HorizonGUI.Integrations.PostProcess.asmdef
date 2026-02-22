@@ -1,0 +1,20 @@
+{
+    "name": "BlackHorizon.HorizonGUI.Integrations.PostProcess",
+    "rootNamespace": "BlackHorizon.HorizonGUI.Integrations.PostProcess",
+    "references": [
+        "BlackHorizon.HorizonGUI.Runtime",
+        "UdonSharp.Runtime",
+        "VRC.Udon",
+        "VRC.SDKBase",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
