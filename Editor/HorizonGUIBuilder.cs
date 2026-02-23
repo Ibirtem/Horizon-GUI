@@ -3,6 +3,7 @@ using UnityEditor;
 using System.IO;
 using System.Collections.Generic;
 using UdonSharpEditor;
+using UdonSharp;
 
 namespace BlackHorizon.HorizonGUI.Editor
 {
@@ -53,7 +54,13 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             CreateLogicModule(root, "Logic_Home", "HorizonGUI_HomeModule");
             CreateLogicModule(root, "Logic_Weather", "HorizonGUI_WeatherModule");
-            CreateLogicModule(root, "Logic_PostProcess", "HorizonGUI_PostProcessModule");
+
+            var ppScript = CreateLogicModule(root, "Logic_PostProcess", "HorizonGUI_PostProcessModule");
+
+            if (ppScript != null)
+            {
+                TriggerPostProcessAutoSetup(ppScript);
+            }
 
             EditorUtility.SetDirty(root);
 
@@ -64,10 +71,10 @@ namespace BlackHorizon.HorizonGUI.Editor
         /// Helper to create a child GameObject and attach a specific Udon script by name.
         /// Prevents ghost objects in hierarchy if script attachment fails.
         /// </summary>
-        private static void CreateLogicModule(GameObject parent, string objectName, string scriptTypeName)
+        private static UdonSharpBehaviour CreateLogicModule(GameObject parent, string objectName, string scriptTypeName)
         {
             Transform existing = parent.transform.Find(objectName);
-            if (existing != null) return;
+            if (existing != null) return existing.GetComponent<UdonSharpBehaviour>();
 
             GameObject go = new GameObject(objectName);
             go.transform.SetParent(parent.transform, false);
@@ -79,10 +86,27 @@ namespace BlackHorizon.HorizonGUI.Editor
             {
                 Debug.LogWarning($"[HorizonBuilder] Could not find or attach script '{scriptTypeName}' to '{objectName}'. Destroying ghost object.");
                 Object.DestroyImmediate(go);
-                return;
+                return null;
             }
 
             Undo.RegisterCreatedObjectUndo(go, "Create Horizon Module");
+            return script;
+        }
+
+        private static void TriggerPostProcessAutoSetup(UdonSharpBehaviour ppScript)
+        {
+            string typeName = "BlackHorizon.HorizonGUI.Integrations.PostProcessing.Editor.HorizonGUI_PostProcessModuleEditor, BlackHorizon.HorizonGUI.Integrations.PostProcess.Editor";
+
+            System.Type editorType = System.Type.GetType(typeName);
+
+            if (editorType != null)
+            {
+                var method = editorType.GetMethod("PerformAutoSetup", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (method != null)
+                {
+                    method.Invoke(null, new object[] { ppScript });
+                }
+            }
         }
 
         /// <summary>

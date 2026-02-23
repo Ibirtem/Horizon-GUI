@@ -40,7 +40,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.PostProcessing.Editor
         /// Orchestrates the automated setup of the Post Processing environment.
         /// Configures layer masks, initializes volume containers, and links profile templates.
         /// </summary>
-        private void PerformAutoSetup(HorizonGUI_PostProcessModule module)
+        public static void PerformAutoSetup(HorizonGUI_PostProcessModule module)
         {
             int waterLayer = LayerMask.NameToLayer("Water");
 
@@ -85,14 +85,14 @@ namespace BlackHorizon.HorizonGUI.Integrations.PostProcessing.Editor
             module.VolumeObj_Grain = EnsureVolumeObject(container, "Override_Grain", "HorizonTemplate_Grain", waterLayer);
 
             EditorUtility.SetDirty(module);
-            Debug.Log("<color=#33FF33>[Horizon PP]</color> Setup complete! Profiles copied and linked securely.");
+            Debug.Log("<color=#33FF33>[Horizon PP]</color> Auto-Setup complete! Profiles copied and linked.");
         }
 
         /// <summary>
         /// Retrieves or creates a child GameObject equipped with a PostProcessVolume component.
         /// Automatically assigns the requested profile template if one is not already assigned.
         /// </summary>
-        private GameObject EnsureVolumeObject(Transform parent, string objName, string templateName, int targetLayer)
+        private static GameObject EnsureVolumeObject(Transform parent, string objName, string templateName, int targetLayer)
         {
             Transform existingTransform = parent.Find(objName);
             GameObject volumeObj;
@@ -137,7 +137,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.PostProcessing.Editor
         /// Locates a specific template profile within the project, copies it into the user's
         /// persistent profile directory to prevent overwriting originals, and returns the copy.
         /// </summary>
-        private PostProcessProfile GetOrCopyProfile(string templateName, string destinationFileName)
+        private static PostProcessProfile GetOrCopyProfile(string templateName, string destinationFileName)
         {
             if (!Directory.Exists(USER_PROFILES_DIR))
             {
