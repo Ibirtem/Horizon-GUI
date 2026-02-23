@@ -67,12 +67,12 @@ namespace BlackHorizon.HorizonGUI
             }
             EditorGUILayout.EndVertical();
 
-            // 3. LOGIC & BINDING
-            HorizonEditorUtils.DrawSectionHeader("LOGIC & BINDING");
+            // 3. QUICK SETUP
+            HorizonEditorUtils.DrawSectionHeader("QUICK SETUP");
             EditorGUILayout.BeginVertical(EditorStyles.helpBox);
 
             EditorGUILayout.HelpBox(
-                "System is ready. Logic scripts are automatically detected from this GameObject and its children during compilation.",
+                "Start with a fully functional example. This installs default templates and configures the Home, Weather, and Post-Processing modules automatically.",
                 MessageType.Info
             );
 
@@ -82,7 +82,7 @@ namespace BlackHorizon.HorizonGUI
             if (GUILayout.Button("Setup Default Dashboard", GUILayout.Height(30)))
             {
                 if (EditorUtility.DisplayDialog("Horizon Setup",
-                    "This will assign default templates AND create logic objects (Home, Weather, About) in this hierarchy.\n\nProceed?",
+                    "This will assign default templates AND create logic objects (Home, Weather, Post-Processing) in this hierarchy.\n\nProceed?",
                     "Yes", "Cancel"))
                 {
                     HorizonGUIBuilder.SetupDashboardEnvironment(authoring);
