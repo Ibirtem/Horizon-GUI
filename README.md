@@ -1,5 +1,7 @@
 # Horizon GUI
 
+> ⚠️ **WIP / HEAVY ALPHA:** This system is currently in early, active development. Features are highly experimental, and the architecture may shift as things evolve. Expect bugs, but also expect rapid improvements!
+
 _(Screenshot of the Dashboard... Wait, where?)_
 
 **A web-like UI framework for VRChat.**
