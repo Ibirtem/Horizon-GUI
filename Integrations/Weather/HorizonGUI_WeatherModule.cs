@@ -1,11 +1,6 @@
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-
-#if HORIZON_WEATHER_INTEGRATION
-using BlackHorizon.HorizonWeatherTime;
-#endif
-
 using UdonSharp;
 using VRC.SDKBase;
 using VRC.Udon;
@@ -29,21 +24,26 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
         [HideInInspector]
         public string cachedVersion;
 
+        private bool _isConnected = false;
+
+        private const int TIME_SYNC = 0;
+        private const int TIME_SIMULATED = 1;
+        private const int TIME_STATIC = 2;
+
+        // =============================================================
+        // LIFECYCLE
+        // =============================================================
+
         public void OnHorizonBuild()
         {
-            TryConnectSystem();
-
-#if HORIZON_WEATHER_INTEGRATION
+            CheckConnection();
             if (Weather_VersionText != null && !string.IsNullOrEmpty(cachedVersion))
-            {
                 Weather_VersionText.text = cachedVersion;
-            }
-#endif
         }
 
         private void Start()
         {
-            TryConnectSystem();
+            CheckConnection();
             UpdateStatusVisuals();
             SyncUI();
         }
@@ -51,7 +51,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
         public void OnShow()
         {
             if (Weather_View != null) Weather_View.SetActive(true);
-            TryConnectSystem();
+            CheckConnection();
             UpdateStatusVisuals();
             SyncUI();
         }
@@ -61,113 +61,115 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
             if (Weather_View != null) Weather_View.SetActive(false);
         }
 
-        public void TryConnectSystem()
+        // =============================================================
+        // CONNECTION
+        // =============================================================
+
+        private void CheckConnection()
         {
-            if (_wtsUdon != null) return;
-
-#if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj == null)
-            {
-                WeatherTimeSystem wts = (WeatherTimeSystem)Object.FindObjectOfType(typeof(WeatherTimeSystem));
-                if (wts != null) weatherSystemObj = wts.gameObject;
-            }
-
-            if (weatherSystemObj != null)
-            {
-                _wtsUdon = (UdonBehaviour)weatherSystemObj.GetComponent(typeof(UdonBehaviour));
-            }
-#endif
+            _isConnected = (_wtsUdon != null);
         }
 
-        private void Update()
-        {
-            if (_wtsUdon == null) return;
-
-#if HORIZON_WEATHER_INTEGRATION
-            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
-            
-            if (Weather_TimeSlider != null && timeMode == 0)
-            {
-                float time = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
-                Weather_TimeSlider.SetValueWithoutNotify(time);
-            }
-#endif
-        }
+        // =============================================================
+        // STATUS
+        // =============================================================
 
         public void UpdateStatusVisuals()
         {
             if (Weather_StatusText != null)
             {
-                Weather_StatusText.text = (_wtsUdon != null)
+                Weather_StatusText.text = _isConnected
                     ? "Status: <color=#33FF33>Connected</color>"
                     : "Status: <color=#FF3333>Not Found</color>";
             }
         }
 
+        // =============================================================
+        // SYNC UI FROM SYSTEM STATE
+        // =============================================================
+
         private void SyncUI()
         {
             if (_wtsUdon == null) return;
 
-#if HORIZON_WEATHER_INTEGRATION
-            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
-            bool isRealTime = (timeMode == 0);
-            
-            if (Weather_RealTimeToggle != null) Weather_RealTimeToggle.isOn = isRealTime;
-            
+            int mode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            bool isRealTime = (mode == TIME_SYNC);
+
+            if (Weather_RealTimeToggle != null)
+                Weather_RealTimeToggle.SetIsOnWithoutNotify(isRealTime);
+
             if (Weather_TimeSlider != null)
             {
-                float time = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
-                Weather_TimeSlider.SetValueWithoutNotify(time);
+                float t = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
+                Weather_TimeSlider.SetValueWithoutNotify(t);
                 Weather_TimeSlider.interactable = !isRealTime;
             }
-#endif
         }
+
+        // =============================================================
+        // UPDATE
+        // =============================================================
+
+        private void Update()
+        {
+            if (_wtsUdon == null || Weather_TimeSlider == null) return;
+
+            int mode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            if (mode == TIME_SYNC || mode == TIME_SIMULATED)
+            {
+                float t = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
+                Weather_TimeSlider.SetValueWithoutNotify(t);
+            }
+        }
+
+        // =============================================================
+        // UI CALLBACKS
+        // =============================================================
 
         public void OnRealTimeChanged()
         {
             if (_wtsUdon == null || Weather_RealTimeToggle == null) return;
 
-#if HORIZON_WEATHER_INTEGRATION
             bool isRealTime = Weather_RealTimeToggle.isOn;
-            _wtsUdon.SetProgramVariable("timeMode", isRealTime ? 0 : 2);
-            
-            if (Weather_TimeSlider != null)
-            {
-                Weather_TimeSlider.interactable = !isRealTime;
-            }
 
-            if (isRealTime) _wtsUdon.SendCustomEvent("ReleaseExternalControl");
-            else _wtsUdon.SendCustomEvent("Refresh");
-#endif
+            _wtsUdon.SetProgramVariable("timeMode",
+                isRealTime ? TIME_SYNC : TIME_STATIC);
+
+            if (Weather_TimeSlider != null)
+                Weather_TimeSlider.interactable = !isRealTime;
+
+            if (isRealTime)
+                _wtsUdon.SendCustomEvent("ReleaseExternalControl");
+            else
+                _wtsUdon.SendCustomEvent("Refresh");
         }
 
         public void OnTimeSliderChanged()
         {
             if (_wtsUdon == null || Weather_TimeSlider == null) return;
 
-#if HORIZON_WEATHER_INTEGRATION
-            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
-            if (timeMode == 0) return;
+            int mode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            if (mode == TIME_SYNC) return;
 
-            _wtsUdon.SetProgramVariable("_sunTimeOfDay", Weather_TimeSlider.value);
+            _wtsUdon.SetProgramVariable("_sunTimeOfDay",
+                Weather_TimeSlider.value);
             _wtsUdon.SendCustomEvent("ForceVisualUpdate");
-#endif
         }
 
-        public void OnProfileClear() => SetWeather(0);
-        public void OnProfileSnow() => SetWeather(1);
-        public void OnProfileRain() => SetWeather(2);
+        // =============================================================
+        // WEATHER PROFILES
+        // =============================================================
+
+        public void OnProfileClear() { SetWeather(0); }
+        public void OnProfileSnow() { SetWeather(1); }
+        public void OnProfileRain() { SetWeather(2); }
 
         private void SetWeather(int index)
         {
-            if (_wtsUdon != null)
-            {
-#if HORIZON_WEATHER_INTEGRATION
-                _wtsUdon.SetProgramVariable("_currentProfileIndex", index);
-                _wtsUdon.SendCustomEvent("SetWeatherProfile");
-                _wtsUdon.SendCustomEvent("Refresh");
-#endif
-            }
+            if (_wtsUdon == null) return;
+
+            _wtsUdon.SetProgramVariable("_pendingProfileIndex", index);
+            _wtsUdon.SendCustomEvent("ApplyPendingProfile");
         }
     }
 }
