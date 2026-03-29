@@ -1,7 +1,10 @@
 using UnityEngine;
 using UnityEditor;
 using BlackHorizon.HorizonGUI.Editor;
+
+#if HORIZON_WEATHER_INTEGRATION
 using BlackHorizon.HorizonWeatherTime;
+#endif
 
 namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
 {
@@ -23,6 +26,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
         /// </summary>
         private void PerformAutoSetup(HorizonGUI_WeatherModule module)
         {
+#if HORIZON_WEATHER_INTEGRATION
             bool isDirty = false;
 
             // 1. Auto-Link System
@@ -62,6 +66,9 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
                 Undo.RecordObject(module.Weather_VersionText, "Update Version Text");
                 module.Weather_VersionText.text = module.cachedVersion;
             }
+#else
+            EditorGUILayout.HelpBox("WeatherTimeSystem is not installed. Module functionality is safely disabled.", MessageType.Info);
+#endif
         }
     }
 }
