@@ -17,6 +17,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
     {
         [Header("Integration")]
         public GameObject weatherSystemObj;
+        public UdonBehaviour _wtsUdon;
 
         [Header("Direct Bindings")]
         public GameObject Weather_View;
@@ -52,6 +53,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
             if (Weather_View != null) Weather_View.SetActive(true);
             TryConnectSystem();
             UpdateStatusVisuals();
+            SyncUI();
         }
 
         public void OnHide()
@@ -61,30 +63,33 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
 
         public void TryConnectSystem()
         {
-            if (weatherSystemObj != null) return;
+            if (_wtsUdon != null) return;
 
 #if HORIZON_WEATHER_INTEGRATION
-            WeatherTimeSystem found = null;
-#if UNITY_EDITOR
-                found = Object.FindObjectOfType<WeatherTimeSystem>(true);
-#else
-                found = Object.FindObjectOfType<WeatherTimeSystem>();
-#endif
-            
-            if (found != null) weatherSystemObj = found.gameObject;
+            if (weatherSystemObj == null)
+            {
+                WeatherTimeSystem wts = (WeatherTimeSystem)Object.FindObjectOfType(typeof(WeatherTimeSystem));
+                if (wts != null) weatherSystemObj = wts.gameObject;
+            }
+
+            if (weatherSystemObj != null)
+            {
+                _wtsUdon = (UdonBehaviour)weatherSystemObj.GetComponent(typeof(UdonBehaviour));
+            }
 #endif
         }
 
         private void Update()
         {
-#if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj == null) return;
-            WeatherTimeSystem wts = weatherSystemObj.GetComponent<WeatherTimeSystem>();
-            if (wts == null) return;
+            if (_wtsUdon == null) return;
 
-            if (Weather_TimeSlider != null && wts.timeMode == TimeMode.SyncWithSystemClock)
+#if HORIZON_WEATHER_INTEGRATION
+            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            
+            if (Weather_TimeSlider != null && timeMode == 0)
             {
-                Weather_TimeSlider.SetValueWithoutNotify(wts._sunTimeOfDay);
+                float time = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
+                Weather_TimeSlider.SetValueWithoutNotify(time);
             }
 #endif
         }
@@ -93,11 +98,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
         {
             if (Weather_StatusText != null)
             {
-                bool connected = false;
-#if HORIZON_WEATHER_INTEGRATION
-                connected = weatherSystemObj != null;
-#endif
-                Weather_StatusText.text = connected
+                Weather_StatusText.text = (_wtsUdon != null)
                     ? "Status: <color=#33FF33>Connected</color>"
                     : "Status: <color=#FF3333>Not Found</color>";
             }
@@ -105,17 +106,18 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
 
         private void SyncUI()
         {
+            if (_wtsUdon == null) return;
+
 #if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj == null) return;
-            WeatherTimeSystem wts = weatherSystemObj.GetComponent<WeatherTimeSystem>();
-            if (wts == null) return;
+            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            bool isRealTime = (timeMode == 0);
             
-            bool isRealTime = wts.timeMode == TimeMode.SyncWithSystemClock;
             if (Weather_RealTimeToggle != null) Weather_RealTimeToggle.isOn = isRealTime;
             
             if (Weather_TimeSlider != null)
             {
-                Weather_TimeSlider.SetValueWithoutNotify(wts._sunTimeOfDay);
+                float time = (float)_wtsUdon.GetProgramVariable("_sunTimeOfDay");
+                Weather_TimeSlider.SetValueWithoutNotify(time);
                 Weather_TimeSlider.interactable = !isRealTime;
             }
 #endif
@@ -123,33 +125,32 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
 
         public void OnRealTimeChanged()
         {
+            if (_wtsUdon == null || Weather_RealTimeToggle == null) return;
+
 #if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj == null || Weather_RealTimeToggle == null) return;
-            WeatherTimeSystem wts = weatherSystemObj.GetComponent<WeatherTimeSystem>();
-            if (wts == null) return;
-            
             bool isRealTime = Weather_RealTimeToggle.isOn;
-            wts.timeMode = isRealTime ? TimeMode.SyncWithSystemClock : TimeMode.StaticManual;
+            _wtsUdon.SetProgramVariable("timeMode", isRealTime ? 0 : 2);
             
             if (Weather_TimeSlider != null)
             {
                 Weather_TimeSlider.interactable = !isRealTime;
-                if (isRealTime) Weather_TimeSlider.SetValueWithoutNotify(wts._sunTimeOfDay);
             }
-            
-            if (isRealTime) wts.ReleaseExternalControl();
-            UpdateStatusVisuals();
+
+            if (isRealTime) _wtsUdon.SendCustomEvent("ReleaseExternalControl");
+            else _wtsUdon.SendCustomEvent("Refresh");
 #endif
         }
 
         public void OnTimeSliderChanged()
         {
-#if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj == null || Weather_TimeSlider == null) return;
-            WeatherTimeSystem wts = weatherSystemObj.GetComponent<WeatherTimeSystem>();
-            if (wts == null || wts.timeMode == TimeMode.SyncWithSystemClock) return;
+            if (_wtsUdon == null || Weather_TimeSlider == null) return;
 
-            wts.SetExternalTime(Weather_TimeSlider.value);
+#if HORIZON_WEATHER_INTEGRATION
+            int timeMode = (int)_wtsUdon.GetProgramVariable("timeMode");
+            if (timeMode == 0) return;
+
+            _wtsUdon.SetProgramVariable("_sunTimeOfDay", Weather_TimeSlider.value);
+            _wtsUdon.SendCustomEvent("ForceVisualUpdate");
 #endif
         }
 
@@ -159,13 +160,14 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
 
         private void SetWeather(int index)
         {
-#if HORIZON_WEATHER_INTEGRATION
-            if (weatherSystemObj != null)
+            if (_wtsUdon != null)
             {
-                WeatherTimeSystem wts = weatherSystemObj.GetComponent<WeatherTimeSystem>();
-                if (wts != null) wts.SetWeatherProfile(index); 
-            }
+#if HORIZON_WEATHER_INTEGRATION
+                _wtsUdon.SetProgramVariable("_currentProfileIndex", index);
+                _wtsUdon.SendCustomEvent("SetWeatherProfile");
+                _wtsUdon.SendCustomEvent("Refresh");
 #endif
+            }
         }
     }
 }
