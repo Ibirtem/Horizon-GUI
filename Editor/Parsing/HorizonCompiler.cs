@@ -844,11 +844,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             GameObject go = s.gameObject;
             go.name = GetNodeName(node);
 
-            if (go.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) go.AddComponent<VRC.SDK3.Components.VRCUiShape>();
-            BoxCollider col = go.GetComponent<BoxCollider>();
-            if (col == null) col = go.AddComponent<BoxCollider>();
-            col.isTrigger = true;
-
             ApplyLayoutStyles(go, styles, node);
             ApplyContainerStyles(go, styles, node);
 
@@ -885,16 +880,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
             ApplyContainerStyles(btnRoot, styles, node);
             ApplyLayoutStyles(btnRoot, styles);
-
-            if (btnRoot.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null)
-                btnRoot.AddComponent<VRC.SDK3.Components.VRCUiShape>();
-
-            BoxCollider col = btnRoot.GetComponent<BoxCollider>();
-            if (col == null)
-            {
-                col = btnRoot.AddComponent<BoxCollider>();
-                col.isTrigger = true;
-            }
 
             return btnRoot;
         }
@@ -992,10 +977,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 inp.readOnly = true;
             }
 
-            if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
-            BoxCollider col = root.AddComponent<BoxCollider>();
-            col.isTrigger = true;
-
             HorizonGUIFactory.SetLayoutSize(root, minH: 50, prefH: 50);
 
             ApplyContainerStyles(root, styles, node);
@@ -1054,10 +1035,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 label.fontSize = 24;
                 ApplyTextStyles(label, styles);
             }
-
-            if (root.GetComponent<VRC.SDK3.Components.VRCUiShape>() == null) root.AddComponent<VRC.SDK3.Components.VRCUiShape>();
-            BoxCollider col = root.AddComponent<BoxCollider>();
-            col.isTrigger = true;
 
             ApplyContainerStyles(root, styles, node);
             ApplyLayoutStyles(root, styles);
