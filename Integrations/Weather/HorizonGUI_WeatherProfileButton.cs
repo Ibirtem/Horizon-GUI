@@ -21,17 +21,16 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather
 #endif
     {
         [Header("Configuration")]
-#if HORIZON_WEATHER_INTEGRATION
-        public WeatherTimeSystem targetSystem;
-#endif
+        public GameObject targetSystemObj;
         public int profileIndex;
 
         public void OnClick()
         {
 #if HORIZON_WEATHER_INTEGRATION
-            if (targetSystem != null)
+            if (targetSystemObj != null)
             {
-                targetSystem.SetWeatherProfile(profileIndex);
+                WeatherTimeSystem wts = targetSystemObj.GetComponent<WeatherTimeSystem>();
+                if (wts != null) wts.SetWeatherProfile(profileIndex);
             }
 #endif
         }

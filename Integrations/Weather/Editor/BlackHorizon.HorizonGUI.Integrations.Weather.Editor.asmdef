@@ -21,9 +21,9 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [],
-    "versionDefines":[
+    "versionDefines": [
         {
-            "name": "BlackHorizon.HorizonWeatherTime.Runtime",
+            "name": "com.blackhorizon.horizonweathertime",
             "expression": "",
             "define": "HORIZON_WEATHER_INTEGRATION"
         }

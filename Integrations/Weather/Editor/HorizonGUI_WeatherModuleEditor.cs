@@ -30,44 +30,38 @@ namespace BlackHorizon.HorizonGUI.Integrations.Weather.Editor
             bool isDirty = false;
 
             // 1. Auto-Link System
-            if (module.weatherSystem == null)
+            if (module.weatherSystemObj == null)
             {
                 var found = Object.FindObjectOfType<WeatherTimeSystem>(true);
                 if (found != null)
                 {
                     Undo.RecordObject(module, "Auto-Link Weather");
-                    module.weatherSystem = found;
+                    module.weatherSystemObj = found.gameObject;
                     isDirty = true;
                 }
             }
 
             // 2. Bake Version into Cached Variable
-            if (module.weatherSystem != null)
+            if (module.weatherSystemObj != null)
             {
-                string version = HorizonEditorUtils.GetVersion(module.weatherSystem);
-                string versionStr = $"v{version}";
-
-                if (module.cachedVersion != versionStr)
+                WeatherTimeSystem wts = module.weatherSystemObj.GetComponent<WeatherTimeSystem>();
+                if (wts != null)
                 {
-                    Undo.RecordObject(module, "Bake Version Cache");
-                    module.cachedVersion = versionStr;
-                    isDirty = true;
+                    string version = HorizonEditorUtils.GetVersion(wts);
+                    string versionStr = $"v{version}";
+
+                    if (module.cachedVersion != versionStr)
+                    {
+                        Undo.RecordObject(module, "Bake Version Cache");
+                        module.cachedVersion = versionStr;
+                        isDirty = true;
+                    }
                 }
             }
 
-            if (isDirty)
-            {
-                EditorUtility.SetDirty(module);
-                module.UpdateStatusVisuals();
-            }
-
-            if (module.Weather_VersionText != null && module.Weather_VersionText.text != module.cachedVersion)
-            {
-                Undo.RecordObject(module.Weather_VersionText, "Update Version Text");
-                module.Weather_VersionText.text = module.cachedVersion;
-            }
+            if (isDirty) EditorUtility.SetDirty(module);
 #else
-            EditorGUILayout.HelpBox("WeatherTimeSystem is not installed. Module functionality is safely disabled.", MessageType.Info);
+            EditorGUILayout.HelpBox("WeatherTimeSystem package missing. Module functionality is disabled.", MessageType.Info);
 #endif
         }
     }
