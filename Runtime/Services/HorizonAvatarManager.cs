@@ -6,53 +6,70 @@ namespace BlackHorizon.HorizonGUI.Services
 {
     /// <summary>
     /// Service that renders players into RenderTextures on demand.
-    /// Implements a lazy-loading "Photobooth" pattern with time-slicing to guarantee zero FPS drops.
     /// </summary>
     public class HorizonAvatarManager : UdonSharpBehaviour
     {
         public Camera photoCamera;
 
-        [Tooltip("Layers to render when background is transparent (usually Player, PlayerLocal, MirrorReflection).")]
+        [Tooltip("Layers for transparent background. Usually 9 (Player) and 18 (MirrorReflection).")]
         public LayerMask avatarOnlyLayers;
 
-        [Tooltip("Layers to render when background is visible (usually Everything).")]
+        [Tooltip("Layers for full environment background.")]
         public LayerMask fullEnvironmentLayers;
 
         public int poolSize = 16;
         public int resolution = 256;
 
-        [Tooltip("Minimum time in seconds between renders for a single slot.")]
+        [Tooltip("Seconds between renders for a single slot.")]
         public float updateInterval = 20f;
 
-        // --- Runtime State ---
+        [Header("Face Targeting")]
+        [Tooltip("Vertical offset from Neck bone in meters. "
+            + "Neck = base of skull. Face center is slightly above. "
+            + "Positive = aim higher, negative = lower. Start at 0.03.")]
+        [Range(-0.15f, 0.15f)]
+        public float neckToFaceOffset = 0.03f; [Header("Camera")]
+        [Tooltip("Distance multiplier relative to neck height. Lower = closer to face.")]
+        [Range(0.25f, 0.80f)]
+        public float cameraDistanceMult = 0.40f;
+
+        [Tooltip("Camera field of view.")]
+        [Range(35f, 75f)]
+        public float cameraFOV = 60f;
+
+        [Header("Debug")]
+        public bool debugLog = false;
+
         private RenderTexture[] _texturePool;
         private int[] _slotOwnerIds;
         private bool[] _slotTransparent;
         private float[] _lastRenderTime;
+        private bool _initialized = false;
 
-        private void Start()
-        {
-            InitializePool();
-        }
+        // --- Render State Machine ---
+        private bool _isWaitingForRender = false;
+        private int _renderWaitFrames = 0;
 
-        /// <summary>
-        /// Pre-allocates RenderTextures and prepares the tracking arrays.
-        /// </summary>
-        private void InitializePool()
+        public void OnShow() { }
+        public void OnHide() { }
+        public void OnHorizonBuild() { }
+
+        private void Start() { EnsureInitialized(); }
+
+        private void EnsureInitialized()
         {
+            if (_initialized) return;
+            _initialized = true;
+
             if (photoCamera != null)
-            {
                 photoCamera.enabled = false;
-            }
 
+            // Default layers: Player (9), PlayerLocal (10), MirrorReflection (18)
             if (avatarOnlyLayers.value == 0)
-            {
                 avatarOnlyLayers = (1 << 9) | (1 << 10) | (1 << 18);
-            }
+
             if (fullEnvironmentLayers.value == 0)
-            {
                 fullEnvironmentLayers = -1;
-            }
 
             _texturePool = new RenderTexture[poolSize];
             _slotOwnerIds = new int[poolSize];
@@ -71,123 +88,132 @@ namespace BlackHorizon.HorizonGUI.Services
         private void OnDestroy()
         {
             if (_texturePool == null) return;
-
             for (int i = 0; i < _texturePool.Length; i++)
             {
                 if (_texturePool[i] != null)
-                {
                     _texturePool[i].Release();
-                }
             }
         }
 
-        /// <summary>
-        /// Registers a slot to continuously track and render a specific player.
-        /// </summary>
-        /// <param name="slotIndex">The physical index in the texture pool.</param>
-        /// <param name="playerId">The VRChat Player ID to render.</param>
-        /// <param name="transparentBackground">If true, clears the background with zero alpha.</param>
         public void RegisterRequest(int slotIndex, int playerId, bool transparentBackground)
         {
+            EnsureInitialized();
             if (slotIndex < 0 || slotIndex >= poolSize) return;
 
             if (_slotOwnerIds[slotIndex] != playerId)
-            {
                 _lastRenderTime[slotIndex] = -updateInterval;
-            }
 
             _slotOwnerIds[slotIndex] = playerId;
             _slotTransparent[slotIndex] = transparentBackground;
         }
 
-        /// <summary>
-        /// Frees the slot so it stops updating.
-        /// </summary>
         public void ClearRequest(int slotIndex)
         {
+            EnsureInitialized();
             if (slotIndex >= 0 && slotIndex < poolSize)
-            {
                 _slotOwnerIds[slotIndex] = -1;
-            }
         }
 
-        /// <summary>
-        /// Returns the assigned RenderTexture for a specific slot.
-        /// </summary>
         public RenderTexture GetTexture(int slotIndex)
         {
-            if (_texturePool == null)
-            {
-                InitializePool();
-            }
-
+            EnsureInitialized();
             if (slotIndex < 0 || slotIndex >= poolSize) return null;
             return _texturePool[slotIndex];
         }
 
+        // ==========================================================
+        // MAIN LOOP
+        // ==========================================================
+
         public override void PostLateUpdate()
         {
             if (photoCamera == null) return;
+            EnsureInitialized();
 
+            // 1. Await Unity's native render cycle.
+            // Manual camera.Render() is bad :( 
+            // VRChat requires the native OnPreCull event to update the IK of 
+            // the Layer 18 clone. Without this delay, the clone is photographed 
+            // in a lagged/default pose, causing the camera to miss the face.
+            if (_isWaitingForRender)
+            {
+                _renderWaitFrames++;
+                if (_renderWaitFrames > 1)
+                {
+                    photoCamera.enabled = false;
+                    photoCamera.targetTexture = null;
+                    _isWaitingForRender = false;
+                }
+                return;
+            }
+
+            // 2. Find the next avatar in the queue
             for (int i = 0; i < poolSize; i++)
             {
                 int targetId = _slotOwnerIds[i];
                 if (targetId == -1) continue;
-
                 if (Time.time - _lastRenderTime[i] < updateInterval) continue;
 
-                VRCPlayerApi targetPlayer = VRCPlayerApi.GetPlayerById(targetId);
+                VRCPlayerApi player = VRCPlayerApi.GetPlayerById(targetId);
 
 #if UNITY_EDITOR
-                if (!Utilities.IsValid(targetPlayer))
+                if (!Utilities.IsValid(player))
                 {
-                    photoCamera.clearFlags = CameraClearFlags.SolidColor;
-                    photoCamera.backgroundColor = new Color(0, 0, 0, 0); 
-                    photoCamera.targetTexture = _texturePool[i];
-                    photoCamera.Render();
-                    photoCamera.targetTexture = null;
-                    
-                    _lastRenderTime[i] = Time.time;
-                    return; 
+                    SetupBlankCamera();
+                    ExecuteRenderCycle(i);
+                    return;
                 }
 #endif
 
-                if (!Utilities.IsValid(targetPlayer)) continue;
+                if (!Utilities.IsValid(player)) continue;
 
-                RenderSlot(i, targetPlayer);
-                _lastRenderTime[i] = Time.time;
+                // 3. Setup camera position and layers
+                if (!SetupCameraForPlayer(i, player))
+                {
+                    SetupBlankCamera();
+                }
 
+                // 4. Trigger the native render cycle
+                ExecuteRenderCycle(i);
                 return;
             }
         }
 
         /// <summary>
-        /// Positions the camera in front of the player's face and takes a snapshot.
+        /// Activates the camera and delegates rendering to Unity's native pipeline.
         /// </summary>
-        private void RenderSlot(int index, VRCPlayerApi player)
+        private void ExecuteRenderCycle(int slotIndex)
         {
+            photoCamera.targetTexture = _texturePool[slotIndex];
+            photoCamera.enabled = true;
+
+            _isWaitingForRender = true;
+            _renderWaitFrames = 0;
+            _lastRenderTime[slotIndex] = Time.time;
+        }
+
+        // ==========================================================
+        // CAMERA SETUP & POSITIONING
+        // ==========================================================
+
+        private bool SetupCameraForPlayer(int index, VRCPlayerApi player)
+        {
+            // --- 1. Layer Culling Setup ---
             if (_slotTransparent[index])
             {
                 photoCamera.clearFlags = CameraClearFlags.SolidColor;
                 photoCamera.backgroundColor = new Color(0, 0, 0, 0);
-
-                if (player.isLocal)
-                {
-                    photoCamera.cullingMask = 1 << 18;
-                }
-                else
-                {
-                    photoCamera.cullingMask = 1 << 9;
-                }
+                photoCamera.cullingMask = player.isLocal ? (1 << 18) : (1 << 9);
             }
             else
             {
                 photoCamera.clearFlags = CameraClearFlags.Skybox;
                 int mask = fullEnvironmentLayers;
+                mask &= ~(1 << 10);
 
                 if (player.isLocal)
                 {
-                    mask &= ~(1 << 10);
+                    mask &= ~(1 << 9);
                     mask |= (1 << 18);
                 }
                 else
@@ -195,54 +221,87 @@ namespace BlackHorizon.HorizonGUI.Services
                     mask &= ~(1 << 18);
                     mask |= (1 << 9);
                 }
-
                 photoCamera.cullingMask = mask;
             }
 
-            VRCPlayerApi.TrackingData headData = player.GetTrackingData(VRCPlayerApi.TrackingDataType.Head);
-            Vector3 viewPos = headData.position;
-            Quaternion headRot = headData.rotation;
+            // --- 2. Positioning ---
+            Vector3 facePos;
+            float neckH;
+            GetFaceTarget(player, out facePos, out neckH);
 
-            Vector3 bonePos = player.GetBonePosition(HumanBodyBones.Head);
-            Vector3 targetFacePos;
+            if (facePos.sqrMagnitude < 0.01f) return false;
 
-            if (bonePos == Vector3.zero)
+            Vector3 forward = GetFacingDirection(player);
+            float dist = Mathf.Clamp(neckH * cameraDistanceMult, 0.12f, 0.60f);
+            Vector3 camPos = facePos + forward * dist;
+
+            photoCamera.transform.position = camPos;
+            photoCamera.transform.LookAt(facePos);
+            photoCamera.nearClipPlane = 0.01f;
+            photoCamera.fieldOfView = cameraFOV;
+
+            return true;
+        }
+
+        private void SetupBlankCamera()
+        {
+            photoCamera.clearFlags = CameraClearFlags.SolidColor;
+            photoCamera.backgroundColor = new Color(0, 0, 0, 0);
+        }
+
+        // ==========================================================
+        // FACE TARGETING
+        // ==========================================================
+
+        /// <summary>
+        /// Calculates the ideal camera target based on the Neck bone.
+        /// Head bone is avoided because it represents the top of the skull and is heavily 
+        /// skewed by avatar accessories (hats, ears, hair). Neck provides a stable baseline.
+        /// Just for now. Maybe in future need more testings.
+        /// </summary>
+        private void GetFaceTarget(VRCPlayerApi player, out Vector3 target, out float neckHeight)
+        {
+            Vector3 feet = player.GetPosition();
+
+            // === PRIMARY: Neck bone ===
+            Vector3 neck = player.GetBonePosition(HumanBodyBones.Neck);
+
+            if (neck.sqrMagnitude > 0.01f && neck.y > feet.y + 0.05f)
             {
-                targetFacePos = viewPos;
-            }
-            else
-            {
-                targetFacePos = Vector3.Lerp(bonePos, viewPos, 0.5f);
-            }
+                neckHeight = neck.y - feet.y;
+                target = new Vector3(neck.x, neck.y + neckToFaceOffset, neck.z);
 
-            if (targetFacePos == Vector3.zero)
-            {
-                photoCamera.clearFlags = CameraClearFlags.SolidColor;
-                photoCamera.backgroundColor = new Color(0, 0, 0, 0);
-                photoCamera.targetTexture = _texturePool[index];
-
-                if (photoCamera != null) photoCamera.Render();
-
-                photoCamera.targetTexture = null;
+                if (debugLog)
+                {
+                    Debug.Log($"[AvatarCam] NECK-TARGET name={player.displayName} isLocal={player.isLocal} "
+                        + $"| neck.y={neck.y:F3} (+{neckHeight:F3}) | TARGET.y={target.y:F3}");
+                }
                 return;
             }
 
-            float avatarHeight = Vector3.Distance(player.GetPosition(), viewPos);
+            // === FALLBACK: Chest ===
+            Vector3 chest = player.GetBonePosition(HumanBodyBones.UpperChest);
+            if (chest.sqrMagnitude < 0.01f) chest = player.GetBonePosition(HumanBodyBones.Chest);
 
-            if (avatarHeight < 0.2f) avatarHeight = 1.6f;
+            if (chest.sqrMagnitude > 0.01f && chest.y > feet.y + 0.05f)
+            {
+                float chestH = chest.y - feet.y;
+                neckHeight = chestH * 1.12f;
+                target = new Vector3(chest.x, chest.y + chestH * 0.12f + neckToFaceOffset, chest.z);
+                return;
+            }
 
-            float cameraDistance = avatarHeight * 0.35f;
+            // === LAST RESORT ===
+            neckHeight = 0.6f;
+            target = feet + Vector3.up * 0.6f;
+        }
 
-            Vector3 offset = headRot * Vector3.forward * cameraDistance;
-            Vector3 cameraPos = targetFacePos + offset;
-
-            photoCamera.transform.position = cameraPos;
-            photoCamera.transform.LookAt(targetFacePos);
-            photoCamera.nearClipPlane = 0.01f;
-
-            photoCamera.targetTexture = _texturePool[index];
-            if (photoCamera != null) photoCamera.Render();
-            photoCamera.targetTexture = null;
+        private Vector3 GetFacingDirection(VRCPlayerApi player)
+        {
+            Vector3 fwd = player.GetRotation() * Vector3.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 0.001f) fwd = Vector3.forward;
+            return fwd.normalized;
         }
     }
 }

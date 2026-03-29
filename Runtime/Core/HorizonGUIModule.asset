@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c333ccfdd0cbdbc4ca30cef2dd6e6b9b, type: 3}
   m_Name: HorizonGUIModule
   m_EditorClassIdentifier: 
-  serializedUdonProgramAsset: {fileID: 11400000, guid: f62ea9b646bc3ff49adc8e5340c9df3d,
+  serializedUdonProgramAsset: {fileID: 11400000, guid: 15fc5baca2945be429a2a180b118bc24,
     type: 2}
   udonAssembly: 
   assemblyError: 
