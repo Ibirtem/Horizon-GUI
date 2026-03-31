@@ -18,11 +18,11 @@ Horizon allows you to focus on _design_ and _logic_, effectively removing the "U
 
 - **HTML & CSS Workflow:** Write your layout in `.html` and style it in `.css`. The compiler handles the layout groups, spacing, and rounding. It's pure web-like development inside Unity.
 - **Zero-Friction Binding:** Forget dragging references in the inspector. Tag an element with `u-bind="MyVar"` in HTML, and the system automatically links it to the `MyVar` field in your C# script during compilation.
-- **Optimized Output:** It generates pure Unity UI with `VRCUiShape` components and colliders automatically attached. No runtime parsing tax — the final output is zero-overhead, optimized GameObjects.
+- **Optimized Output:** It generates pure Unity UI. No runtime parsing tax — the final output is zero-overhead, optimized GameObjects.
 
 ### 2. The Dashboard (Included)
 
-Horizon ships with a production-ready Dashboard template that showcases the framework's capabilities. It's not just a UI skin; it includes full logic:
+Horizon ships with a ready-for-use Dashboard template for world creators that showcases the framework's capabilities. It's not just a UI skin, It had quite good functionality for a "start":
 
 - 📸 **Smart Home Screen:** Features a **Live Player Grid** that uses a zero-overhead "Photobooth" system to render player avatars into UI slots dynamically.
 - ✨ **Post-Processing Control:** A pre-wired module to control Bloom, AO, and other effects without touching layer masks manually.
