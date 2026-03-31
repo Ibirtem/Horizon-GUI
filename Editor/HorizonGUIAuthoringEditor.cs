@@ -119,46 +119,110 @@ namespace BlackHorizon.HorizonGUI
 
         /// <summary>
         /// Orchestrates the construction of the UI system.
-        /// Processes markup, applies styles, sets up the physical Canvas, and links Udon logic.
         /// </summary>
         private void BuildInterface(HorizonGUIAuthoring authoring)
         {
-            HorizonGUIFactory.EnsureEventSystemInside(authoring.gameObject);
-
+            // 1. Parse Templates
             HorizonNode rootNode = HorizonMarkupParser.Parse(authoring.htmlFile.text);
-            HorizonStyleSheet styleSheet = new HorizonStyleSheet();
-            if (authoring.cssFile != null)
-                styleSheet = HorizonCSSParser.Parse(authoring.cssFile.text);
+            HorizonStyleSheet styleSheet = authoring.cssFile != null ?
+                HorizonCSSParser.Parse(authoring.cssFile.text) : new HorizonStyleSheet();
 
+            // 2. Prepare Hierarchy & Layers
+            HorizonGUIFactory.EnsureEventSystemInside(authoring.gameObject);
             GameObject canvasObj = PrepareCanvasRoot(authoring);
             RectTransform rootRect = canvasObj.GetComponent<RectTransform>();
 
             ClearExistingGeneratedUI(canvasObj);
             SetupVisualLayers(canvasObj, out GameObject contentRoot);
 
-            // --- LOGIC DISCOVERY PHASE ---
-            List<UdonSharpBehaviour> logicScripts = CollectLogicScripts(authoring);
-            Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{logicScripts.Count}</b> logic scripts.");
+            // 3. Discover & Configure Logic
+            List<UdonSharpBehaviour> diScripts = ConfigureLogicAndServices(authoring);
+
+            // 4. Compile UI & Inject Dependencies
+            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.resourceMap, diScripts);
+
+            // 5. Finalize Physics & Layout
+            FinalizeLayoutAndPhysics(canvasObj, rootRect);
+            LogBuildResults(authoring.name);
+        }
+
+        /// <summary>
+        /// Handles the discovery of all user scripts, injects singletons (AvatarManager), 
+        /// and configures the Manager's routing list.
+        /// </summary>
+        private List<UdonSharpBehaviour> ConfigureLogicAndServices(HorizonGUIAuthoring authoring)
+        {
+            List<UdonSharpBehaviour> diScripts = CollectLogicScriptsForDI(authoring);
+            Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{diScripts.Count}</b> logic scripts for DI.");
 
             HorizonAvatarManager avatarService = HorizonGUIFactory.EnsureAvatarService(authoring.gameObject);
+            InjectService(diScripts, avatarService);
 
-            InjectService(logicScripts, avatarService);
+            ConfigureRoutingManager(authoring, diScripts);
 
+            return diScripts;
+        }
+
+        /// <summary>
+        /// Filters out core framework components and registers only user scripts 
+        /// into the HorizonGUIManager for OnShow/OnHide event routing.
+        /// </summary>
+        private void ConfigureRoutingManager(HorizonGUIAuthoring authoring, List<UdonSharpBehaviour> diScripts)
+        {
             var manager = authoring.GetComponent<HorizonGUIManager>();
-            if (manager != null)
+            if (manager == null) return;
+
+            var routingScripts = new List<UdonSharpBehaviour>();
+            foreach (var script in diScripts)
             {
-                var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
-                binder.BindArray("modules", logicScripts);
-                binder.Apply();
-                EditorUtility.SetDirty(manager);
-                Debug.Log($"<color=#33FF33>[Horizon]</color> Populated <b>HorizonGUIManager.modules</b> with discovered scripts.");
+                if (IsSystemComponent(script)) continue;
+                routingScripts.Add(script);
             }
 
-            // --- BUILD & INJECT ---
-            HorizonCompiler.BuildInterface(contentRoot, rootNode, styleSheet, authoring.resourceMap, logicScripts);
+            var binder = new HorizonGUIFactory.HorizonLogicBinder(manager);
+            binder.BindArray("logicScripts", routingScripts);
+            binder.Apply();
 
-            FinalizeLayoutAndPhysics(canvasObj, rootRect);
+            EditorUtility.SetDirty(manager);
+            Debug.Log($"<color=#33FF33>[Horizon]</color> Populated <b>HorizonGUIManager.logicScripts</b> with {routingScripts.Count} scripts.");
+        }
 
+        /// <summary>
+        /// Collects all scripts needed for u-bind and u-click operations.
+        /// Excludes the Authoring script itself.
+        /// </summary>
+        private List<UdonSharpBehaviour> CollectLogicScriptsForDI(HorizonGUIAuthoring authoring)
+        {
+            var results = new List<UdonSharpBehaviour>();
+            var allScripts = authoring.GetComponentsInChildren<UdonSharpBehaviour>(true);
+
+            foreach (var script in allScripts)
+            {
+                if (script == null || script is HorizonGUIAuthoring) continue;
+                results.Add(script);
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// Identifies whether a script is an internal Horizon framework component.
+        /// </summary>
+        private bool IsSystemComponent(UdonSharpBehaviour script)
+        {
+            return script is HorizonGUIManager ||
+                   script is HorizonAvatarManager ||
+                   script is HorizonDataGrid ||
+                   script is HorizonSmartSlot ||
+                   script is HorizonEventCaller ||
+                   script is HorizonChannelController;
+        }
+
+        /// <summary>
+        /// Logs the final outcome of the build process.
+        /// </summary>
+        private void LogBuildResults(string authoringName)
+        {
             int errors = HorizonCompiler.ValidationErrors;
             if (errors > 0)
             {
@@ -166,7 +230,7 @@ namespace BlackHorizon.HorizonGUI
             }
             else
             {
-                Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoring.name}' completed successfully.");
+                Debug.Log($"<color=#33FF33>[Horizon]</color> Build for '{authoringName}' completed successfully.");
             }
         }
 
@@ -205,28 +269,6 @@ namespace BlackHorizon.HorizonGUI
                     so.ApplyModifiedProperties();
                 }
             }
-        }
-
-        /// <summary>
-        /// Discovery phase: Scans the local hierarchy for any UdonSharpBehaviour components.
-        /// These scripts are used as targets for Dependency Injection and Event Wiring.
-        /// </summary>
-        /// <param name="authoring">The root authoring component.</param>
-        /// <returns>A list of discovered logic scripts.</returns>
-        private List<UdonSharpBehaviour> CollectLogicScripts(HorizonGUIAuthoring authoring)
-        {
-            var results = new List<UdonSharpBehaviour>();
-            var allScripts = authoring.GetComponentsInChildren<UdonSharpBehaviour>(true);
-
-            foreach (var script in allScripts)
-            {
-                if (script == null) continue;
-                if (script is HorizonGUIAuthoring) continue;
-
-                results.Add(script);
-            }
-
-            return results;
         }
 
         /// <summary>

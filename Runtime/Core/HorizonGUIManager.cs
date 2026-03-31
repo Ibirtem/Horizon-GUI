@@ -14,9 +14,7 @@ namespace BlackHorizon.HorizonGUI
     {
         [Header("System Core")]
         [Tooltip("List of all logic scripts discovered and bound by the compiler.")]
-        public UdonSharpBehaviour[] modules;
-
-        [Tooltip("Global modal/overlay container.")]
+        public UdonSharpBehaviour[] logicScripts;
         public GameObject overlayContainer;
 
         private int _currentTabIndex = 0;
@@ -34,25 +32,24 @@ namespace BlackHorizon.HorizonGUI
         #region Navigation Logic
 
         /// <summary>
-        /// Switches the active module based on the provided index.
-        /// Uses 'SendCustomEvent' to notify modules of visibility changes via 'OnShow' and 'OnHide'.
-        /// This ensures loose coupling with any discovered logic script.
+        /// Triggers 'OnShow' and 'OnHide' events on registered logic scripts based on the active index.
+        /// This ensures loose coupling, allowing any custom script to react to tab changes without strict inheritance.
         /// </summary>
-        /// <param name="index">The module index within the 'modules' array.</param>
+        /// <param name="index">The target index within the 'logicScripts' array.</param>
         public void OpenTab(int index)
         {
-            if (modules == null || index < 0 || index >= modules.Length) return;
+            if (logicScripts == null || index < 0 || index >= logicScripts.Length) return;
 
             _currentTabIndex = index;
 
-            for (int i = 0; i < modules.Length; i++)
+            for (int i = 0; i < logicScripts.Length; i++)
             {
-                if (modules[i] != null)
+                if (logicScripts[i] != null)
                 {
                     bool isActive = (i == index);
 
-                    if (isActive) modules[i].SendCustomEvent("OnShow");
-                    else modules[i].SendCustomEvent("OnHide");
+                    if (isActive) logicScripts[i].SendCustomEvent("OnShow");
+                    else logicScripts[i].SendCustomEvent("OnHide");
                 }
             }
         }

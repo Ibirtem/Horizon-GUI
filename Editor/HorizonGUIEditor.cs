@@ -7,12 +7,12 @@ namespace BlackHorizon.HorizonGUI
     [CustomEditor(typeof(HorizonGUIManager))]
     public class HorizonGUIEditor : UnityEditor.Editor
     {
-        private SerializedProperty _modulesProp;
+        private SerializedProperty _logicScriptsProp;
         private SerializedProperty _overlayContainerProp;
 
         private void OnEnable()
         {
-            _modulesProp = serializedObject.FindProperty("modules");
+            _logicScriptsProp = serializedObject.FindProperty("logicScripts");
             _overlayContainerProp = serializedObject.FindProperty("overlayContainer");
         }
 
@@ -25,7 +25,7 @@ namespace BlackHorizon.HorizonGUI
 
             // 2. SYSTEM REFERENCES
             HorizonEditorUtils.DrawSectionHeader("SYSTEM REFERENCES");
-            EditorGUILayout.PropertyField(_modulesProp, true);
+            EditorGUILayout.PropertyField(_logicScriptsProp, true);
             EditorGUILayout.PropertyField(_overlayContainerProp);
 
             serializedObject.ApplyModifiedProperties();

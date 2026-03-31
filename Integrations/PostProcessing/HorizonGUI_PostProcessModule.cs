@@ -38,10 +38,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.PostProcessing
         /// </summary>
         public void OnShow()
         {
-            if (PP_View != null)
-            {
-                PP_View.SetActive(true);
-            }
+            // Empty
         }
 
         /// <summary>
@@ -49,10 +46,7 @@ namespace BlackHorizon.HorizonGUI.Integrations.PostProcessing
         /// </summary>
         public void OnHide()
         {
-            if (PP_View != null)
-            {
-                PP_View.SetActive(false);
-            }
+            // Empty
         }
 
         /// <summary>

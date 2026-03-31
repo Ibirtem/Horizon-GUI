@@ -54,13 +54,12 @@ namespace BlackHorizon.HorizonGUI
 
         public void OnShow()
         {
-            if (Home_View != null) Home_View.SetActive(true);
             UpdateInfo();
         }
 
         public void OnHide()
         {
-            if (Home_View != null) Home_View.SetActive(false);
+            // Empty
         }
 
         private void Update()
