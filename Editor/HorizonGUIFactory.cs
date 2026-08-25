@@ -25,16 +25,7 @@ namespace BlackHorizon.HorizonGUI.Editor
         // Default styling fallbacks. 
         // These are used when CSS does not provide specific overrides.
 
-        public static readonly Color ColorPrimary = new Color(1f, 1f, 1f, 0.9f);
-        public static readonly Color ColorSecondary = new Color(1f, 1f, 1f, 0.5f);
         public static readonly Color ColorGlass = new Color(1f, 1f, 1f, 0.1f);
-        public static readonly Color ColorPanel = new Color(0f, 0f, 0f, 0.2f);
-
-        private const float SIZE_CLOCK = 54f;
-        private const float SIZE_H1 = 48f;
-        private const float SIZE_H2 = 42f;
-        private const float SIZE_BODY = 24f;
-        private const float SIZE_SMALL = 18f;
 
         // Public accessors for compatibility with Compiler
         public static Color ColorGlassDark => ColorGlass;
@@ -68,11 +59,9 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject go = CreateBlock(name, parent);
             Image img = go.AddComponent<Image>();
             img.raycastTarget = false;
-
             img.color = Color.white;
-
             img.type = Image.Type.Sliced;
-            img.sprite = GetOrGenerateRoundedSprite();
+            img.sprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             img.pixelsPerUnitMultiplier = 1.0f;
 
             return go;
@@ -127,227 +116,14 @@ namespace BlackHorizon.HorizonGUI.Editor
 
         #endregion
 
-        #region Asset Generation & Loading
-
-        /// <summary>
-        /// Procedurally generates a circular sprite for use in 9-slicing.
-        /// Configured with specific borders to allow both perfect circles and rounded rectangles.
-        /// </summary>
-        public static Sprite GetOrGenerateRoundedSprite()
-        {
-            string dir = Path.GetDirectoryName(GENERATED_SPRITE_PATH);
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
-
-            Sprite existing = AssetDatabase.LoadAssetAtPath<Sprite>(GENERATED_SPRITE_PATH);
-            if (existing != null) return existing;
-
-            int size = 128;
-            float radius = 64f;
-            Texture2D tex = new Texture2D(size, size, TextureFormat.RGBA32, false);
-            Color[] pixels = new Color[size * size];
-            Vector2 center = new Vector2(64, 64);
-
-            for (int y = 0; y < size; y++)
-            {
-                for (int x = 0; x < size; x++)
-                {
-                    float dist = Vector2.Distance(new Vector2(x + 0.5f, y + 0.5f), center);
-                    pixels[y * size + x] = new Color(1, 1, 1, Mathf.Clamp01(radius - dist + 0.5f));
-                }
-            }
-
-            tex.SetPixels(pixels);
-            tex.Apply();
-            File.WriteAllBytes(GENERATED_SPRITE_PATH, tex.EncodeToPNG());
-            AssetDatabase.ImportAsset(GENERATED_SPRITE_PATH, ImportAssetOptions.ForceUpdate);
-
-            TextureImporter importer = AssetImporter.GetAtPath(GENERATED_SPRITE_PATH) as TextureImporter;
-            if (importer != null)
-            {
-                importer.textureType = TextureImporterType.Sprite;
-                importer.alphaIsTransparency = true;
-                importer.spriteBorder = new Vector4(64, 64, 64, 64);
-                importer.SaveAndReimport();
-            }
-            return AssetDatabase.LoadAssetAtPath<Sprite>(GENERATED_SPRITE_PATH);
-        }
-
-        /// <summary>
-        /// Generates or retrieves the glass material using the custom blur shader.
-        /// </summary>
-        public static Material GetGlassMaterial()
-        {
-            string folderPath = "Assets/Horizon GUI/Core/Runtime/Materials";
-            string matPath = $"{folderPath}/HorizonGlass.mat";
-
-            if (!Directory.Exists(folderPath))
-            {
-                Directory.CreateDirectory(folderPath);
-                AssetDatabase.Refresh();
-            }
-
-            Material mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
-            if (mat == null)
-            {
-                Shader shader = Shader.Find("Horizon/UI/Glass Blur");
-                if (shader == null)
-                {
-                    Debug.LogError("[HorizonFactory] Shader 'Horizon/UI/Glass Blur' not found. Ensure Shaders folder is imported correctly.");
-                    return null;
-                }
-
-                mat = new Material(shader);
-                mat.SetFloat("_BlurSize", 8.0f);
-                mat.SetColor("_Color", new Color(0.9f, 0.95f, 1.0f, 0.3f));
-
-                AssetDatabase.CreateAsset(mat, matPath);
-            }
-            return mat;
-        }
-
-        /// <summary>
-        /// Searches the project for a sprite asset matching the given filename.
-        /// Prioritizes assets within 'Horizon' or 'Textures' folders to ensure the correct icon is loaded.
-        /// </summary>
-        /// <param name="filename">The name of the icon file (with or without extension).</param>
-        /// <returns>The found Sprite, or null if no matching image asset exists.</returns>
-        public static Sprite LoadPackageSprite(string filename)
-        {
-            string searchName = Path.GetFileNameWithoutExtension(filename);
-
-            string[] guids = AssetDatabase.FindAssets(searchName);
-
-            if (guids.Length == 0)
-            {
-                Debug.LogWarning($"[HorizonGUI] Icon not found in project: {filename}");
-                return null;
-            }
-
-            string bestPath = null;
-            foreach (var guid in guids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-
-                string ext = Path.GetExtension(path).ToLower();
-                if (ext != ".png" && ext != ".jpg" && ext != ".psd" && ext != ".tga")
-                    continue;
-
-                if (path.Contains("Horizon") || path.Contains("GUI") || path.Contains("Textures"))
-                {
-                    bestPath = path;
-                    break;
-                }
-
-                if (bestPath == null) bestPath = path;
-            }
-
-            if (bestPath == null) return null;
-
-            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(bestPath);
-
-            if (sprite == null)
-            {
-                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(bestPath);
-                if (tex != null)
-                {
-                    sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
-                }
-            }
-
-            return sprite;
-        }
-
-        /// <summary>
-        /// Checks if the Avatar Manager Service exists in the hierarchy. 
-        /// If not, procedural generation builds the service and configures a dedicated 
-        /// isolated camera for "Photobooth" capturing of player avatars.
-        /// </summary>
-        /// <param name="systemRoot">The parent Horizon UI System object.</param>
-        /// <returns>The attached HorizonAvatarManager component.</returns>
-        public static HorizonAvatarManager EnsureAvatarService(GameObject systemRoot)
-        {
-            string serviceName = "Service_AvatarManager";
-            Transform existingTr = systemRoot.transform.Find(serviceName);
-
-            HorizonAvatarManager manager = null;
-            GameObject serviceObj = null;
-
-            if (existingTr != null)
-            {
-                serviceObj = existingTr.gameObject;
-                manager = serviceObj.GetComponent<HorizonAvatarManager>();
-                if (manager == null) manager = AttachLogic<HorizonAvatarManager>(serviceObj);
-            }
-            else
-            {
-                serviceObj = new GameObject(serviceName);
-                serviceObj.transform.SetParent(systemRoot.transform, false);
-                manager = AttachLogic<HorizonAvatarManager>(serviceObj);
-                Undo.RegisterCreatedObjectUndo(serviceObj, "Create Avatar Service");
-            }
-
-            SerializedObject so = new SerializedObject(manager);
-            SerializedProperty camProp = so.FindProperty("photoCamera");
-
-            Camera cam = null;
-            if (camProp != null && camProp.objectReferenceValue != null)
-            {
-                cam = (Camera)camProp.objectReferenceValue;
-            }
-
-            if (cam == null)
-            {
-                Transform camTr = serviceObj.transform.Find("Avatar_Photobooth_Camera");
-                if (camTr != null)
-                {
-                    cam = camTr.GetComponent<Camera>();
-                }
-                else
-                {
-                    GameObject camObj = new GameObject("Avatar_Photobooth_Camera");
-                    camObj.transform.SetParent(serviceObj.transform, false);
-                    cam = camObj.AddComponent<Camera>();
-
-                    Undo.RegisterCreatedObjectUndo(camObj, "Create Photobooth Camera");
-                }
-
-                cam.enabled = false;
-                cam.clearFlags = CameraClearFlags.Skybox;
-                cam.nearClipPlane = 0.05f;
-                cam.farClipPlane = 50f;
-
-                int avatarMask = 0;
-
-                if (LayerMask.NameToLayer("Player") != -1) avatarMask |= (1 << LayerMask.NameToLayer("Player"));
-                if (LayerMask.NameToLayer("PlayerLocal") != -1) avatarMask |= (1 << LayerMask.NameToLayer("PlayerLocal"));
-                if (LayerMask.NameToLayer("MirrorReflection") != -1) avatarMask |= (1 << LayerMask.NameToLayer("MirrorReflection"));
-
-                if (avatarMask == 0) avatarMask = (1 << 9) | (1 << 10) | (1 << 18);
-
-                cam.cullingMask = avatarMask;
-            }
-
-            ConfigureLogic<HorizonAvatarManager>(serviceObj, b =>
-            {
-                b.Bind("photoCamera", cam);
-                b.BindVal("avatarOnlyLayers", cam.cullingMask);
-                b.BindVal("fullEnvironmentLayers", -1);
-                b.BindVal("poolSize", 16);
-                b.BindVal("resolution", 256);
-            });
-
-            return manager;
-        }
-
-        #endregion
-
         #region UI Widgets & Layout
-
-        public enum TextStyle { H1, H2, Body, BodyDim, Small, SmallDim, Clock }
 
         /// <summary>
         /// Creates a TextMeshProUGUI element with theme-compliant styling.
         /// </summary>
+        /// <param name="parent">Parent container GameObject.</param>
+        /// <param name="content">Initial text content.</param>
+        /// <returns>The created TextMeshProUGUI component.</returns>
         public static TextMeshProUGUI CreateText(GameObject parent, string content)
         {
             GameObject go = CreateBlock("Label", parent);
@@ -360,53 +136,6 @@ namespace BlackHorizon.HorizonGUI.Editor
             tmp.alignment = TextAlignmentOptions.Left;
 
             return tmp;
-        }
-
-        /// <summary>
-        /// Constructs a circular icon button with independent background and interaction layers.
-        /// Used by DataGrid.
-        /// </summary>
-        public static GameObject CreateIconButton(string name, GameObject parent, Sprite bgSprite, Sprite iconSprite)
-        {
-            GameObject btnObj = CreatePanel(name, parent);
-            Image bgImg = btnObj.GetComponent<Image>();
-            bgImg.color = Color.clear;
-            bgImg.sprite = bgSprite;
-            bgImg.raycastTarget = true;
-
-            GameObject hoverObj = CreatePanel("Interaction_Overlay", btnObj);
-            Image hoverImg = hoverObj.GetComponent<Image>();
-            hoverImg.color = Color.white;
-            hoverImg.sprite = bgSprite;
-            hoverImg.raycastTarget = false;
-
-            Stretch(hoverObj);
-            hoverObj.AddComponent<LayoutElement>().ignoreLayout = true;
-
-            GameObject iconObj = CreateBlock("Icon", btnObj);
-            RectTransform iconRect = iconObj.GetComponent<RectTransform>();
-            iconRect.anchorMin = new Vector2(0.22f, 0.22f);
-            iconRect.anchorMax = new Vector2(0.78f, 0.78f);
-            iconRect.offsetMin = Vector2.zero;
-            iconRect.offsetMax = Vector2.zero;
-
-            Image iconImg = iconObj.AddComponent<Image>();
-            iconImg.sprite = iconSprite;
-            iconImg.preserveAspect = true;
-            iconImg.raycastTarget = false;
-
-            Button b = btnObj.AddComponent<Button>();
-            b.targetGraphic = hoverImg;
-            b.transition = Selectable.Transition.ColorTint;
-
-            ColorBlock cb = b.colors;
-            cb.normalColor = Color.clear;
-            cb.highlightedColor = new Color(1, 1, 1, 0.1f);
-            cb.pressedColor = new Color(1, 1, 1, 0.2f);
-            cb.fadeDuration = 0.05f;
-            b.colors = cb;
-
-            return btnObj;
         }
 
         #endregion
@@ -604,7 +333,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             sbRect.offsetMax = new Vector2(-4, -sbMarginTop);
 
             Image trackImg = sbObj.AddComponent<Image>();
-            trackImg.sprite = GetOrGenerateRoundedSprite();
+            trackImg.sprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             trackImg.type = Image.Type.Sliced;
             trackImg.color = new Color(1, 1, 1, 0.03f);
             trackImg.pixelsPerUnitMultiplier = 3.0f;
@@ -614,7 +343,7 @@ namespace BlackHorizon.HorizonGUI.Editor
 
             GameObject handle = CreateBlock("Handle", slidingArea);
             Image handleImg = handle.AddComponent<Image>();
-            handleImg.sprite = GetOrGenerateRoundedSprite();
+            handleImg.sprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             handleImg.type = Image.Type.Sliced;
             handleImg.color = new Color(1, 1, 1, 0.3f);
             handleImg.pixelsPerUnitMultiplier = 3.0f;
@@ -631,106 +360,9 @@ namespace BlackHorizon.HorizonGUI.Editor
             return content;
         }
 
-        /// <summary>
-        /// Creates a high-performance data grid with a fixed pool of reusable slots.
-        /// </summary>
-        public static HorizonDataGrid CreateDataGrid(string name, GameObject parent, int poolSize, Vector2 cellSize, UdonSharpBehaviour eventTarget = null, string eventName = "OnItemSelected", bool useCircleStyle = false)
-        {
-            GameObject gridObj = CreateGrid(name, parent, cellSize, Vector2.zero, flexGrow: 1, padding: 10);
-            var manager = AttachLogic<HorizonDataGrid>(gridObj);
-            Sprite circleSprite = GetOrGenerateRoundedSprite();
-            var slots = new System.Collections.Generic.List<HorizonGridItem>();
-
-            for (int i = 0; i < poolSize; i++)
-            {
-                GameObject slotObj = CreateIconButton($"Slot_{i:00}", gridObj, circleSprite, null);
-
-                Transform iconTr = slotObj.transform.Find("Icon");
-                if (iconTr != null) Stretch(iconTr.gameObject, 0);
-
-                if (useCircleStyle)
-                {
-                    Image bg = slotObj.GetComponent<Image>();
-                    bg.color = new Color(1, 1, 1, 0.1f);
-                    if (iconTr != null)
-                    {
-                        Image iconImg = iconTr.GetComponent<Image>();
-                        Stretch(iconTr.gameObject, 0);
-                        iconImg.sprite = circleSprite;
-                        iconImg.type = Image.Type.Sliced;
-                        iconImg.color = new Color(1, 1, 1, 0.6f);
-                    }
-                }
-
-                var item = AttachLogic<HorizonGridItem>(slotObj);
-                ConfigureLogic<HorizonGridItem>(slotObj, binder =>
-                {
-                    binder.Bind("gridManager", manager);
-                    binder.BindVal("slotIndex", i);
-                });
-
-                Button btn = slotObj.GetComponent<Button>();
-                if (btn != null)
-                {
-                    var backingItem = UdonSharpEditorUtility.GetBackingUdonBehaviour(item);
-                    if (backingItem != null)
-                    {
-                        UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
-                            btn.onClick,
-                            backingItem.SendCustomEvent,
-                            "OnClick"
-                        );
-                    }
-                }
-
-                slots.Add(item);
-            }
-
-            ConfigureLogic<HorizonDataGrid>(gridObj, binder =>
-            {
-                binder.BindArray("slotPool", slots);
-                binder.BindVal("itemsPerPage", poolSize);
-                if (eventTarget != null)
-                {
-                    binder.Bind("targetCallback", UdonSharpEditorUtility.GetBackingUdonBehaviour(eventTarget));
-                    binder.BindVal("callbackEventName", eventName);
-                }
-            });
-            return manager;
-        }
-
         #endregion
 
         #region Layout & Interaction Helpers
-
-        /// <summary>
-        /// Checks for an existing EventSystem in the scene. If none is found, creates a new one 
-        /// prioritizing the new InputSystemUIInputModule, with a fallback to StandaloneInputModule.
-        /// </summary>
-        /// <param name="parent">The GameObject to host the new EventSystem if creation is required.</param>
-        public static void EnsureEventSystemInside(GameObject parent)
-        {
-            if (Object.FindObjectOfType<UnityEngine.EventSystems.EventSystem>() != null) return;
-
-            GameObject esObj = new GameObject("System_Input");
-            esObj.transform.SetParent(parent.transform);
-            esObj.AddComponent<UnityEngine.EventSystems.EventSystem>();
-
-            System.Type newModuleType = System.Type.GetType("UnityEngine.InputSystem.UI.InputSystemUIInputModule, Unity.InputSystem");
-
-            if (newModuleType != null)
-            {
-                esObj.AddComponent(newModuleType);
-                Debug.Log("<color=#33FF33>[HorizonFactory]</color> Created System_Input using modern <b>InputSystemUIInputModule</b>.");
-            }
-            else
-            {
-                Debug.LogWarning("<color=yellow>[HorizonFactory]</color> Modern Input System package not found. Falling back to <b>StandaloneInputModule</b>. Consider migrating your project to the new Input System.");
-                var input = esObj.AddComponent<UnityEngine.EventSystems.StandaloneInputModule>();
-                input.horizontalAxis = "Horizontal";
-                input.verticalAxis = "Vertical";
-            }
-        }
 
         /// <summary>
         /// Configures the RectTransform anchors to fully expand and fill the parent container.
@@ -838,7 +470,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject bgObj = CreatePanel("Background", container);
             Image bgImg = bgObj.GetComponent<Image>();
             bgImg.color = new Color(1, 1, 1, 0.1f);
-            bgImg.sprite = GetOrGenerateRoundedSprite();
+            bgImg.sprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             bgImg.raycastTarget = true;
             bgImg.pixelsPerUnitMultiplier = 64f / 3f;
 
@@ -853,7 +485,7 @@ namespace BlackHorizon.HorizonGUI.Editor
             GameObject handle = CreatePanel("Handle", handleArea);
             Image hImg = handle.GetComponent<Image>();
             hImg.color = Color.white;
-            hImg.sprite = GetOrGenerateRoundedSprite();
+            hImg.sprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             hImg.raycastTarget = true;
             hImg.pixelsPerUnitMultiplier = 64f / 20f;
 
@@ -872,80 +504,6 @@ namespace BlackHorizon.HorizonGUI.Editor
         }
 
         #endregion
-
-        /// <summary>
-        /// Searches for a sprite asset based on the HTML 'src' attribute.
-        /// <para>
-        /// Search Priority:
-        /// 1. Explicit Overrides in ResourceMap (O(1)).
-        /// 2. Specific Search Folders in ResourceMap (Fast).
-        /// 3. Global Project Search (Slow, Fallback if Map is missing).
-        /// </para>
-        /// </summary>
-        /// <param name="filename">The filename (e.g. "icon.png" or just "icon"). Extension is optional but recommended for precision.</param>
-        /// <param name="map">The configuration asset defining search paths.</param>
-        /// <returns>The found Sprite, or null if not found.</returns>
-        public static Sprite LoadSprite(string filename, HorizonResourceMap map)
-        {
-            if (string.IsNullOrEmpty(filename)) return null;
-
-            if (map != null)
-            {
-                Sprite overrideSprite = map.GetOverride(filename);
-                if (overrideSprite != null) return overrideSprite;
-            }
-
-            string searchName = Path.GetFileNameWithoutExtension(filename);
-
-            string[] searchFolders = null;
-            if (map != null && map.searchFolders.Count > 0)
-            {
-                searchFolders = map.searchFolders.ToArray();
-            }
-
-            string[] guids = AssetDatabase.FindAssets(searchName, searchFolders);
-
-            if (guids.Length == 0)
-            {
-                Debug.LogWarning($"[HorizonGUI] Icon '{filename}' not found. Checked in: {(searchFolders != null ? string.Join(", ", searchFolders) : "Entire Project")}");
-                return null;
-            }
-
-            string bestPath = null;
-
-            foreach (var guid in guids)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guid);
-                string ext = Path.GetExtension(path).ToLower();
-
-                if (ext != ".png" && ext != ".jpg" && ext != ".psd" && ext != ".tga") continue;
-
-                if (Path.HasExtension(filename))
-                {
-                    if (path.EndsWith(filename, System.StringComparison.OrdinalIgnoreCase))
-                    {
-                        bestPath = path;
-                        break;
-                    }
-                }
-
-                if (bestPath == null) bestPath = path;
-            }
-
-            if (bestPath == null) return null;
-
-            Sprite sprite = AssetDatabase.LoadAssetAtPath<Sprite>(bestPath);
-            if (sprite == null)
-            {
-                Texture2D tex = AssetDatabase.LoadAssetAtPath<Texture2D>(bestPath);
-                if (tex != null)
-                {
-                    sprite = Sprite.Create(tex, new Rect(0, 0, tex.width, tex.height), new Vector2(0.5f, 0.5f));
-                }
-            }
-
-            return sprite;
-        }
 
         /// <summary>
         /// Dynamically locates a C# type by name and attaches it as an UdonSharp component.

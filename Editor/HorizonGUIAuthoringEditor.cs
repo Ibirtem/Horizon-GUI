@@ -128,7 +128,7 @@ namespace BlackHorizon.HorizonGUI
                 HorizonCSSParser.Parse(authoring.cssFile.text) : new HorizonStyleSheet();
 
             // 2. Prepare Hierarchy & Layers
-            HorizonGUIFactory.EnsureEventSystemInside(authoring.gameObject);
+            HorizonSceneServices.EnsureEventSystemInside(authoring.gameObject);
             GameObject canvasObj = PrepareCanvasRoot(authoring);
             RectTransform rootRect = canvasObj.GetComponent<RectTransform>();
 
@@ -155,7 +155,7 @@ namespace BlackHorizon.HorizonGUI
             List<UdonSharpBehaviour> diScripts = CollectLogicScriptsForDI(authoring);
             Debug.Log($"<color=#33FF33>[Horizon]</color> Discovered <b>{diScripts.Count}</b> logic scripts for DI.");
 
-            HorizonAvatarManager avatarService = HorizonGUIFactory.EnsureAvatarService(authoring.gameObject);
+            HorizonAvatarManager avatarService = HorizonSceneServices.EnsureAvatarService(authoring.gameObject);
             InjectService(diScripts, avatarService);
 
             ConfigureRoutingManager(authoring, diScripts);
@@ -321,7 +321,7 @@ namespace BlackHorizon.HorizonGUI
         /// </summary>
         private void SetupVisualLayers(GameObject canvasObj, out GameObject contentRoot)
         {
-            Sprite bgSprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
+            Sprite bgSprite = HorizonAssetPipeline.GetOrGenerateRoundedSprite();
             float windowMultiplier = 1.6f;
 
             // 1. Global Background (The Mask)
@@ -345,7 +345,7 @@ namespace BlackHorizon.HorizonGUI
             glassImg.sprite = bgSprite;
 
             HorizonGUIFactory.Stretch(glass);
-            glassImg.material = HorizonGUIFactory.GetGlassMaterial();
+            glassImg.material = HorizonAssetPipeline.GetGlassMaterial();
             glass.transform.localPosition = new Vector3(0, 0, -0.5f);
             glassImg.raycastTarget = false;
             glassImg.pixelsPerUnitMultiplier = windowMultiplier;

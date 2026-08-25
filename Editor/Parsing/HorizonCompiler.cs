@@ -19,6 +19,8 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
     {
         public static int ValidationErrors { get; private set; }
 
+        public static void IncrementValidationErrors() => ValidationErrors++;
+
         private static HorizonStyleSheet _activeStyleSheet;
         private static HorizonResourceMap _activeResourceMap;
         private static bool _isBuildingTemplate = false;
@@ -59,15 +61,15 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             _bindingsRegistry = new Dictionary<string, GameObject>();
             _pendingEvents = new List<PendingEvent>();
 
-            // Init Context
             _activeStyleSheet = styleSheet;
             _activeResourceMap = resourceMap;
-            _isBuildingTemplate = false;
+
+            var context = new HorizonBuildContext(_activeStyleSheet, _activeResourceMap, false, BuildNode);
 
             // 1. Build Visual Tree
             foreach (var child in rootNode.Children)
             {
-                BuildNode(child, rootContainer);
+                BuildNode(child, rootContainer, context);
             }
 
             BuildChannelControllers(rootContainer);
@@ -84,19 +86,24 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             _activeChannels.Clear();
             _bindingsRegistry.Clear();
             _pendingEvents.Clear();
-
             _activeStyleSheet = null;
             _activeResourceMap = null;
         }
 
         /// <summary>
-        /// Recursive entry point for building the UI tree.
-        /// Uses static context fields instead of passing arguments recursively.
+        /// Recursive entry point for translating an AST node into GameObjects using registered tag handlers.
         /// </summary>
-        private static void BuildNode(HorizonNode node, GameObject parent)
+        /// <param name="node">AST node to compile.</param>
+        /// <param name="parent">Parent container GameObject.</param>
+        /// <param name="context">Active compilation context (created automatically if null).</param>
+        public static void BuildNode(HorizonNode node, GameObject parent, HorizonBuildContext context = null)
         {
-            GameObject createdObj = null;
-            var styles = _activeStyleSheet.GetComputedStyle(node);
+            if (context == null)
+            {
+                context = new HorizonBuildContext(_activeStyleSheet, _activeResourceMap, _isBuildingTemplate, BuildNode);
+            }
+
+            var styles = context.StyleSheet != null ? context.StyleSheet.GetComputedStyle(node) : new Dictionary<string, string>();
 
             if (node.Attributes.TryGetValue("style", out string inlineStyle))
             {
@@ -104,66 +111,14 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 foreach (var kvp in overrides) styles[kvp.Key] = kvp.Value;
             }
 
-            string tag = node.Tag.ToLower();
-
-            switch (tag)
-            {
-                case "scroll":
-                    createdObj = BuildScroll(node, parent, styles);
-                    break;
-
-                case "h-grid":
-                    createdObj = BuildDataGrid(node, parent, styles);
-                    break;
-
-                case "button":
-                    createdObj = BuildButton(node, parent, styles);
-                    break;
-
-                case "text":
-                case "h1":
-                case "h2":
-                case "p":
-                case "label":
-                    createdObj = BuildText(node, parent, styles);
-                    break;
-
-                case "input":
-                    string type = node.Attributes.ContainsKey("type") ? node.Attributes["type"].ToLower() : "text";
-                    if (type == "range") createdObj = BuildRangeInput(node, parent, styles);
-                    else createdObj = BuildTextInput(node, parent, styles);
-                    break;
-
-                case "toggle":
-                    createdObj = BuildToggle(node, parent, styles);
-                    break;
-
-                case "icon":
-                case "img":
-                    bool isRaw = node.Attributes.ContainsKey("raw");
-                    createdObj = BuildIcon(node, parent, styles, _activeResourceMap, isRaw);
-                    break;
-
-                case "view":
-                case "div":
-                case "section":
-                    createdObj = BuildContainer(GetNodeName(node), parent, styles, node);
-                    break;
-
-                case "hr":
-                    createdObj = BuildSeparator(node, parent, styles);
-                    break;
-
-                default:
-                    createdObj = BuildContainer(GetNodeName(node), parent, styles, node);
-                    break;
-            }
+            IHorizonTagHandler handler = HorizonTagRegistry.GetHandler(node.Tag);
+            GameObject createdObj = handler.Build(node, parent, styles, context);
 
             if (createdObj != null)
             {
                 if (node.Attributes.TryGetValue("u-bind", out string bindName))
                 {
-                    if (_isBuildingTemplate)
+                    if (context.IsBuildingTemplate || _isBuildingTemplate)
                     {
                         createdObj.name = $"{createdObj.name}__BIND__{bindName}";
                     }
@@ -183,7 +138,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 if (node.Attributes.TryGetValue("u-click", out string methodName))
                 {
-                    if (!_isBuildingTemplate)
+                    if (!context.IsBuildingTemplate && !_isBuildingTemplate)
                     {
                         _pendingEvents.Add(new PendingEvent
                         {
@@ -195,11 +150,11 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 RegisterChannels(createdObj, node);
 
-                if (tag != "h-grid")
+                if (node.Tag.ToLower() != "h-grid")
                 {
                     foreach (var child in node.Children)
                     {
-                        BuildNode(child, createdObj);
+                        BuildNode(child, createdObj, context);
                     }
                 }
 
@@ -503,55 +458,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
             }
         }
 
-        /// <summary>
-        /// Constructs a vertical scrollable area.
-        /// </summary>
-        private static GameObject BuildScroll(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            GameObject content = HorizonGUIFactory.CreateScrollableColumn(GetNodeName(node), parent);
-            if (content.transform.parent != null && content.transform.parent.parent != null)
-            {
-                GameObject root = content.transform.parent.parent.gameObject;
-                ApplyLayoutStyles(root, styles);
-                ApplyContainerStyles(content, styles, node);
-            }
-            return content;
-        }
-
-        /// <summary>
-        /// Constructs a thin horizontal line (separator).
-        /// Uses a wrapper structure to allow for internal padding (indentation).
-        /// </summary>
-        private static GameObject BuildSeparator(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            GameObject wrapper = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
-
-            GameObject line = HorizonGUIFactory.CreatePanel("Visual_Line", wrapper);
-            Image img = line.GetComponent<Image>();
-            img.sprite = null;
-
-            ApplyContainerStyles(line, styles, node);
-
-            float height = ParseFloat(styles, "height", 2);
-            float width = ParseFloat(styles, "width", -1);
-
-            HorizonGUIFactory.SetLayoutSize(wrapper,
-                minH: height,
-                prefH: height,
-                prefW: width > 0 ? width : (float?)null,
-                flexW: width > 0 ? 0 : 1
-            );
-
-            float padding = ParseFloat(styles, "padding", 0);
-            RectTransform lineRect = line.GetComponent<RectTransform>();
-            lineRect.anchorMin = Vector2.zero;
-            lineRect.anchorMax = Vector2.one;
-            lineRect.offsetMin = new Vector2(padding, 0);
-            lineRect.offsetMax = new Vector2(-padding, 0);
-
-            return wrapper;
-        }
-
         private static Dictionary<string, string> ParseInlineStyle(string styleString)
         {
             var styles = new Dictionary<string, string>();
@@ -570,767 +476,6 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                 }
             }
             return styles;
-        }
-
-        /// <summary>
-        /// Constructs a complex DataGrid with pooled items.
-        /// </summary>
-        private static GameObject BuildDataGrid(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            int poolSize = ParseInt(node.Attributes, "pool", 64);
-            GameObject gridObj = CreateGridContainer(node, parent, styles);
-            var manager = HorizonGUIFactory.AttachLogic<HorizonDataGrid>(gridObj);
-
-            GameObject prototype = PrepareGridTemplate(node);
-            bool isTemplated = (prototype != null);
-
-            var slots = new List<HorizonSmartSlot>();
-
-            for (int i = 0; i < poolSize; i++)
-            {
-                GameObject slotObj = CreateSlotInstance(gridObj, prototype, node, i);
-
-                HorizonSmartSlot slotLogic = ConfigureSlotLogic(slotObj, manager, i, isTemplated);
-
-                slots.Add(slotLogic);
-            }
-
-            if (prototype != null && prototype.transform.parent != null)
-            {
-                Object.DestroyImmediate(prototype.transform.parent.gameObject);
-            }
-
-            ConfigureGridManager(gridObj, manager, slots, poolSize);
-
-            return gridObj;
-        }
-
-        // --- SUB-ROUTINES ---
-
-        /// <summary>
-        /// Creates the root GameObject for the grid and applies layout styles.
-        /// </summary>
-        private static GameObject CreateGridContainer(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            float w = ParseFloat(node.Attributes, "cell-w", 100);
-            float h = ParseFloat(node.Attributes, "cell-h", 100);
-
-            if (!styles.ContainsKey("gap") && !styles.ContainsKey("spacing"))
-            {
-                float attrSpacing = ParseFloat(node.Attributes, "spacing", 10);
-                styles["gap"] = $"{attrSpacing}px";
-            }
-
-            GameObject gridObj = HorizonGUIFactory.CreateGrid(GetNodeName(node), parent, new Vector2(w, h), Vector2.zero);
-
-            ApplyLayoutStyles(gridObj, styles, node);
-            ApplyContainerStyles(gridObj, styles, node);
-
-            return gridObj;
-        }
-
-        /// <summary>
-        /// Parses the children of <h-grid> to create a prototype GameObject.
-        /// Returns null if no children exist.
-        /// </summary>
-        private static GameObject PrepareGridTemplate(HorizonNode node)
-        {
-            if (node.Children.Count == 0) return null;
-
-            GameObject tempHolder = new GameObject("Temp_Holder");
-            tempHolder.SetActive(false);
-
-            _isBuildingTemplate = true;
-            try
-            {
-                BuildNode(node.Children[0], tempHolder);
-            }
-            catch
-            {
-                Object.DestroyImmediate(tempHolder);
-                throw;
-            }
-            finally
-            {
-                _isBuildingTemplate = false;
-            }
-
-            if (tempHolder.transform.childCount > 0)
-            {
-                return tempHolder.transform.GetChild(0).gameObject;
-            }
-
-            Object.DestroyImmediate(tempHolder);
-            return null;
-        }
-
-        /// <summary>
-        /// Instantiates a slot from the prototype.
-        /// Requires a template defined in HTML.
-        /// </summary>
-        private static GameObject CreateSlotInstance(GameObject gridParent, GameObject prototype, HorizonNode node, int index)
-        {
-            string slotName = $"Slot_{index:00}";
-
-            if (prototype != null)
-            {
-                GameObject instance = Object.Instantiate(prototype, gridParent.transform);
-                instance.name = slotName;
-                instance.SetActive(true);
-                return instance;
-            }
-            else
-            {
-                Debug.LogError($"<color=red>[HorizonCompiler]</color> Grid '<b>{GetNodeName(node)}</b>' has no template! Please add children to <h-grid> in your HTML.");
-                ValidationErrors++;
-
-                GameObject errorObj = new GameObject(slotName + "_ERROR");
-                errorObj.transform.SetParent(gridParent.transform);
-                var img = errorObj.AddComponent<Image>();
-                img.color = Color.red;
-                return errorObj;
-            }
-        }
-
-        /// <summary>
-        /// Attaches the SmartSlot component, bakes bindings, and wires click events.
-        /// </summary>
-        private static HorizonSmartSlot ConfigureSlotLogic(GameObject slotObj, HorizonDataGrid manager, int index, bool isTemplated)
-        {
-            var item = HorizonGUIFactory.AttachLogic<HorizonSmartSlot>(slotObj);
-
-            BakeSmartSlotBindings(slotObj, item, isTemplated);
-
-            HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slotObj, binder =>
-            {
-                binder.Bind("gridManager", manager);
-                binder.BindVal("slotIndex", index);
-            });
-
-            Button btn = slotObj.GetComponent<Button>() ?? slotObj.GetComponentInChildren<Button>();
-
-            if (btn != null)
-            {
-                HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slotObj, binder =>
-                {
-                    binder.Bind("mainButton", btn);
-                });
-
-                var backingItem = UdonSharpEditorUtility.GetBackingUdonBehaviour(item);
-                if (backingItem != null)
-                {
-                    UnityEditor.Events.UnityEventTools.AddStringPersistentListener(
-                        btn.onClick,
-                        backingItem.SendCustomEvent,
-                        "OnClick"
-                    );
-                }
-            }
-
-            return item;
-        }
-
-        /// <summary>
-        /// Pushes the created slots into the DataGrid manager.
-        /// </summary>
-        private static void ConfigureGridManager(GameObject gridObj, HorizonDataGrid manager, List<HorizonSmartSlot> slots, int poolSize)
-        {
-            HorizonGUIFactory.ConfigureLogic<HorizonDataGrid>(gridObj, binder =>
-            {
-                binder.BindArray("slotPool", slots);
-                binder.BindVal("itemsPerPage", poolSize);
-            });
-        }
-
-        /// <summary>
-        /// Recursively scans a slot instance for components with 'u-bind' and populates the SmartSlot arrays.
-        /// </summary>
-        private static void BakeSmartSlotBindings(GameObject root, HorizonSmartSlot slot, bool isTemplated)
-        {
-            var textKeys = new List<string>();
-            var textTargets = new List<TextMeshProUGUI>();
-            var imgKeys = new List<string>();
-            var imgTargets = new List<Image>();
-            var rawKeys = new List<string>();
-            var rawTargets = new List<RawImage>();
-
-            if (!isTemplated)
-            {
-                var txt = root.GetComponentInChildren<TextMeshProUGUI>();
-                if (txt) { textKeys.Add("MainText"); textTargets.Add(txt); }
-
-                var imgs = root.GetComponentsInChildren<Image>();
-                foreach (var img in imgs)
-                {
-                    if (img.gameObject != root)
-                    {
-                        imgKeys.Add("MainIcon"); imgTargets.Add(img);
-                        break;
-                    }
-                }
-
-                var raws = root.GetComponentsInChildren<RawImage>();
-                foreach (var raw in raws)
-                {
-                    if (raw.gameObject != root)
-                    {
-                        rawKeys.Add("MainRaw"); rawTargets.Add(raw);
-                        break;
-                    }
-                }
-            }
-            else
-            {
-                var allTransforms = root.GetComponentsInChildren<Transform>(true);
-                foreach (var tr in allTransforms)
-                {
-                    string name = tr.name;
-                    if (name.Contains("__BIND__"))
-                    {
-                        string[] parts = name.Split(new string[] { "__BIND__" }, System.StringSplitOptions.None);
-                        if (parts.Length < 2) continue;
-
-                        string key = parts[1];
-
-                        var txt = tr.GetComponent<TextMeshProUGUI>();
-                        if (txt != null)
-                        {
-                            textKeys.Add(key);
-                            textTargets.Add(txt);
-                        }
-
-                        var img = tr.GetComponent<Image>();
-                        if (img != null)
-                        {
-                            imgKeys.Add(key);
-                            imgTargets.Add(img);
-                        }
-
-                        var raw = tr.GetComponent<RawImage>();
-                        if (raw != null)
-                        {
-                            rawKeys.Add(key);
-                            rawTargets.Add(raw);
-                        }
-
-                        tr.name = parts[0];
-                    }
-                }
-            }
-
-            HorizonGUIFactory.ConfigureLogic<HorizonSmartSlot>(slot.gameObject, binder =>
-            {
-                binder.BindArray("textKeys", textKeys);
-                binder.BindArray("textTargets", textTargets);
-                binder.BindArray("imageKeys", imgKeys);
-                binder.BindArray("imageTargets", imgTargets);
-                binder.BindArray("rawKeys", rawKeys);
-                binder.BindArray("rawTargets", rawTargets);
-            });
-        }
-
-        /// <summary>
-        /// Constructs a range input (Slider) with VRC interaction setup.
-        /// </summary>
-        private static GameObject BuildRangeInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            if (styles.ContainsKey("background-color")) styles.Remove("background-color");
-
-            float min = ParseFloat(node.Attributes, "min", 0f);
-            float max = ParseFloat(node.Attributes, "max", 1f);
-            float val = ParseFloat(node.Attributes, "value", 0f);
-
-            Slider s = HorizonGUIFactory.CreateSlider(parent, min, max, val);
-            GameObject go = s.gameObject;
-            go.name = GetNodeName(node);
-
-            ApplyLayoutStyles(go, styles, node);
-            ApplyContainerStyles(go, styles, node);
-
-            return go;
-        }
-
-        /// <summary>
-        /// Constructs an interactive button with state and interaction layers.
-        /// </summary>
-        private static GameObject BuildButton(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            GameObject btnRoot = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent);
-            Image bgImg = btnRoot.GetComponent<Image>();
-            bgImg.raycastTarget = true;
-
-            GameObject hoverObj = HorizonGUIFactory.CreatePanel("Interaction_Overlay", btnRoot);
-            HorizonGUIFactory.Stretch(hoverObj);
-            Image hoverImg = hoverObj.GetComponent<Image>();
-
-            LayoutElement le = hoverObj.AddComponent<LayoutElement>();
-            le.ignoreLayout = true;
-
-            Button btn = btnRoot.AddComponent<Button>();
-            btn.targetGraphic = hoverImg;
-            btn.transition = Selectable.Transition.ColorTint;
-
-            ColorBlock cb = btn.colors;
-            cb.normalColor = Color.clear;
-            cb.highlightedColor = new Color(1, 1, 1, 0.1f);
-            cb.pressedColor = new Color(1, 1, 1, 0.2f);
-            cb.selectedColor = Color.clear;
-            cb.fadeDuration = 0.1f;
-            btn.colors = cb;
-
-            ApplyContainerStyles(btnRoot, styles, node);
-            ApplyLayoutStyles(btnRoot, styles);
-
-            return btnRoot;
-        }
-
-        /// <summary>
-        /// Constructs a generic layout block (div).
-        /// </summary>
-        private static GameObject BuildContainer(string name, GameObject parent, Dictionary<string, string> styles, HorizonNode node)
-        {
-            GameObject go = HorizonGUIFactory.CreateBlock(name, parent);
-            ApplyContainerStyles(go, styles, node);
-            ApplyLayoutStyles(go, styles, node);
-            return go;
-        }
-
-        private static string GetFrameworkVersion()
-        {
-            string[] guids = AssetDatabase.FindAssets("HorizonGUIManager t:MonoScript");
-            if (guids.Length > 0)
-            {
-                string path = AssetDatabase.GUIDToAssetPath(guids[0]);
-                Object scriptAsset = AssetDatabase.LoadAssetAtPath<Object>(path);
-                return HorizonEditorUtils.GetVersion(scriptAsset);
-            }
-            return "?.?.?";
-        }
-
-        /// <summary>
-        /// Constructs a text label with specific predefined styles (H1, H2, Label, Body).
-        /// </summary>
-        private static GameObject BuildText(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            if (node.Attributes.ContainsKey("h-version"))
-            {
-                string ver = GetFrameworkVersion();
-                if (!string.IsNullOrEmpty(node.TextContent) && node.TextContent.Contains("{v}"))
-                    node.TextContent = node.TextContent.Replace("{v}", ver);
-                else
-                    node.TextContent = $"v{ver}";
-            }
-
-            var tmp = HorizonGUIFactory.CreateText(parent, node.TextContent);
-            tmp.gameObject.name = GetNodeName(node);
-
-            ApplyTextStyles(tmp, styles);
-            ApplyLayoutStyles(tmp.gameObject, styles);
-
-            return tmp.gameObject;
-        }
-
-        /// <summary>
-        /// Constructs a styled text input field.
-        /// </summary>
-        private static GameObject BuildTextInput(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            Sprite bg = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-
-            GameObject root = HorizonGUIFactory.CreatePanel(GetNodeName(node), parent);
-            Image img = root.GetComponent<Image>();
-            img.color = new Color(1, 1, 1, 0.1f);
-            img.sprite = bg;
-            img.type = Image.Type.Sliced;
-            img.pixelsPerUnitMultiplier = 3.0f;
-
-            GameObject textArea = HorizonGUIFactory.CreateBlock("Text Area", root);
-            RectTransform taRect = textArea.GetComponent<RectTransform>();
-            taRect.anchorMin = Vector2.zero; taRect.anchorMax = Vector2.one;
-            taRect.offsetMin = new Vector2(10, 0); taRect.offsetMax = new Vector2(-10, 0);
-
-            string initialText = node.Attributes.ContainsKey("value") ? node.Attributes["value"] : "";
-
-            var t = HorizonGUIFactory.CreateText(textArea, initialText);
-            t.fontSize = 24;
-            t.color = Color.white;
-
-            GameObject placeObj = HorizonGUIFactory.CreateBlock("Placeholder", textArea);
-            HorizonGUIFactory.Stretch(placeObj);
-
-            string placeText = node.Attributes.ContainsKey("placeholder") ? node.Attributes["placeholder"] : "Enter text...";
-
-            var p = HorizonGUIFactory.CreateText(placeObj, placeText);
-            p.fontSize = 24;
-            p.color = new Color(1, 1, 1, 0.5f);
-            p.fontStyle = FontStyles.Italic;
-
-            TMP_InputField inp = root.AddComponent<TMP_InputField>();
-            inp.textViewport = taRect;
-            inp.textComponent = t;
-            inp.placeholder = p;
-            inp.targetGraphic = img;
-            inp.text = initialText;
-
-            if (node.Attributes.ContainsKey("readonly"))
-            {
-                inp.readOnly = true;
-            }
-
-            HorizonGUIFactory.SetLayoutSize(root, minH: 50, prefH: 50);
-
-            ApplyContainerStyles(root, styles, node);
-            ApplyLayoutStyles(root, styles);
-
-            LayoutElement le = root.GetComponent<LayoutElement>();
-            if (le != null) le.flexibleHeight = 0;
-
-            return root;
-        }
-
-        /// <summary>
-        /// Constructs a styled toggle switch.
-        /// </summary>
-        private static GameObject BuildToggle(HorizonNode node, GameObject parent, Dictionary<string, string> styles)
-        {
-            float spacing = styles.ContainsKey("gap") ? ParseFloat(styles, "gap", 15) : 15;
-
-            GameObject root = HorizonGUIFactory.CreateRow(GetNodeName(node), parent, spacing: spacing, align: TextAnchor.MiddleLeft);
-
-            GameObject bgObj = HorizonGUIFactory.CreatePanel("Background", root);
-            Image bgImg = bgObj.GetComponent<Image>();
-            bgImg.color = new Color(1, 1, 1, 0.1f);
-            bgImg.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-            bgImg.pixelsPerUnitMultiplier = 64f / 20f;
-
-            HorizonGUIFactory.SetLayoutSize(bgObj, 40, 40, 40, 40);
-            bgImg.raycastTarget = true;
-
-            GameObject checkObj = HorizonGUIFactory.CreatePanel("Checkmark", bgObj);
-            Image checkImg = checkObj.GetComponent<Image>();
-            checkImg.color = Color.white;
-            checkImg.sprite = HorizonGUIFactory.LoadPackageSprite("checkmark.png");
-
-            RectTransform checkRect = checkObj.GetComponent<RectTransform>();
-            checkRect.anchorMin = new Vector2(0.2f, 0.2f); checkRect.anchorMax = new Vector2(0.8f, 0.8f);
-            checkRect.offsetMin = Vector2.zero; checkRect.offsetMax = Vector2.zero;
-
-            Toggle tog = root.AddComponent<Toggle>();
-            tog.targetGraphic = bgImg;
-            tog.graphic = checkImg;
-            tog.isOn = false;
-
-            tog.transition = Selectable.Transition.ColorTint;
-            ColorBlock cb = tog.colors;
-            cb.normalColor = new Color(1, 1, 1, 0.1f);
-            cb.highlightedColor = new Color(1, 1, 1, 0.25f);
-            cb.pressedColor = new Color(1, 1, 1, 0.4f);
-            cb.selectedColor = new Color(1, 1, 1, 0.1f);
-            cb.fadeDuration = 0.1f;
-            tog.colors = cb;
-
-            if (!string.IsNullOrEmpty(node.TextContent))
-            {
-                var label = HorizonGUIFactory.CreateText(root, node.TextContent);
-                label.fontSize = 24;
-                ApplyTextStyles(label, styles);
-            }
-
-            ApplyContainerStyles(root, styles, node);
-            ApplyLayoutStyles(root, styles);
-
-            return root;
-        }
-
-        /// <summary>
-        /// Constructs an icon, image, or raw-image element.
-        /// </summary>
-        private static GameObject BuildIcon(HorizonNode node, GameObject parent, Dictionary<string, string> styles, HorizonResourceMap resourceMap, bool isRaw)
-        {
-            GameObject go = HorizonGUIFactory.CreateBlock(GetNodeName(node), parent);
-
-            if (isRaw)
-            {
-                RawImage img = go.AddComponent<RawImage>();
-                img.raycastTarget = false;
-                img.color = Color.white;
-
-                Shader s = Shader.Find("Horizon/UI/Rounded RawImage");
-                if (s != null) img.material = new Material(s);
-            }
-            else
-            {
-                Image img = go.AddComponent<Image>();
-                img.raycastTarget = false;
-                img.preserveAspect = true;
-
-                if (node.Attributes.TryGetValue("src", out string src))
-                {
-                    img.sprite = HorizonGUIFactory.LoadSprite(src, resourceMap);
-                    if (img.sprite != null) img.color = Color.white;
-                    else img.color = Color.magenta;
-                }
-            }
-
-            float w = ParseFloat(styles, "width", -1);
-            float h = ParseFloat(styles, "height", -1);
-
-            if (w > 0 || h > 0)
-            {
-                HorizonGUIFactory.SetLayoutSize(go,
-                    minW: w > 0 ? w : (float?)null,
-                    minH: h > 0 ? h : (float?)null,
-                    prefW: w > 0 ? w : (float?)null,
-                    prefH: h > 0 ? h : (float?)null);
-            }
-
-            ApplyLayoutStyles(go, styles, node);
-
-            return go;
-        }
-
-        /// <summary>
-        /// Generates a readable name for a GameObject based on node ID or class.
-        /// </summary>
-        private static string GetNodeName(HorizonNode node)
-        {
-            if (node.Attributes.ContainsKey("id")) return node.Attributes["id"];
-            if (node.Attributes.ContainsKey("class")) return $"{node.Tag}.{node.Attributes["class"].Split(' ')[0]}";
-            return node.Tag;
-        }
-
-        /// <summary>
-        /// Applies container-specific styles like backgrounds and layout groups.
-        /// Includes smart calculation for pixelsPerUnitMultiplier to prevent ovals.
-        /// </summary>
-        private static void ApplyContainerStyles(GameObject go, Dictionary<string, string> styles, HorizonNode node)
-        {
-            if (styles.TryGetValue("background-color", out string hex))
-            {
-                Image img = go.GetComponent<Image>();
-                if (img == null) img = go.AddComponent<Image>();
-
-                if (ColorUtility.TryParseHtmlString(hex, out Color col))
-                {
-                    img.color = col;
-
-                    if (col.a <= 0.01f)
-                    {
-                        img.raycastTarget = false;
-                    }
-
-                    if (img.sprite == null)
-                    {
-                        img.sprite = HorizonGUIFactory.GetOrGenerateRoundedSprite();
-                        img.type = Image.Type.Sliced;
-
-                        // 1. Physical properties of generated texture
-                        const float SRC_RADIUS = 64f;
-
-                        // 2. Determine Dimensions
-                        RectTransform rt = go.GetComponent<RectTransform>();
-
-                        float w = ParseFloat(styles, "width", -1);
-                        float h = ParseFloat(styles, "height", -1);
-
-                        if (w <= 0) w = rt.rect.width;
-                        if (h <= 0) h = rt.rect.height;
-
-                        if (w <= 1) w = 100;
-                        if (h <= 1) h = 100;
-
-                        float minSide = Mathf.Min(w, h);
-                        float maxPossibleRadius = minSide / 2f;
-
-                        // 3. Determine Desired Target Radius
-                        float targetRadius = 20f;
-
-                        if (styles.ContainsKey("border-radius"))
-                        {
-                            targetRadius = ParseFloat(styles, "border-radius", 20f);
-                        }
-                        else
-                        {
-                            bool isFullRound = false;
-                            if (node != null && node.Attributes.TryGetValue("class", out string cls))
-                            {
-                                string lowCls = cls.ToLower();
-                                if (lowCls.Contains("sidebar") || lowCls.Contains("nav-btn") || lowCls.Contains("profile-btn") || lowCls.Contains("circle"))
-                                {
-                                    isFullRound = true;
-                                }
-                            }
-
-                            if (isFullRound) targetRadius = maxPossibleRadius;
-                        }
-
-                        // 4. Safety Clamp
-                        if (targetRadius > maxPossibleRadius) targetRadius = maxPossibleRadius;
-                        if (targetRadius < 1f) targetRadius = 1f;
-
-                        // 5. Apply
-                        img.pixelsPerUnitMultiplier = SRC_RADIUS / targetRadius;
-                    }
-                }
-            }
-
-            // --- Layout & Padding Logic ---
-
-            bool isRow = styles.ContainsKey("flex-direction") && styles["flex-direction"] == "row";
-
-            float spacing = ParseFloat(styles, "gap", 0) + ParseFloat(styles, "spacing", 0);
-
-            int pAll = (int)ParseFloat(styles, "padding", 0);
-            int pTop = (int)ParseFloat(styles, "padding-top", pAll);
-            int pBot = (int)ParseFloat(styles, "padding-bottom", pAll);
-            int pLeft = (int)ParseFloat(styles, "padding-left", pAll);
-            int pRight = (int)ParseFloat(styles, "padding-right", pAll);
-
-            TextAnchor align = TextAnchor.UpperLeft;
-            if (styles.TryGetValue("align-items", out string alignVal))
-            {
-                if (alignVal == "center") align = TextAnchor.MiddleCenter;
-                if (alignVal == "flex-end") align = TextAnchor.LowerRight;
-                if (alignVal == "stretch") align = TextAnchor.UpperLeft;
-            }
-
-            LayoutGroup lg = go.GetComponent<LayoutGroup>();
-            if (lg == null)
-            {
-                if (go.GetComponent<Slider>() == null && go.GetComponent<TMP_InputField>() == null)
-                {
-                    if (isRow) lg = go.AddComponent<HorizontalLayoutGroup>();
-                    else lg = go.AddComponent<VerticalLayoutGroup>();
-                }
-            }
-
-            if (lg != null)
-            {
-                lg.padding = new RectOffset(pLeft, pRight, pTop, pBot);
-
-                if (lg is HorizontalLayoutGroup hlg)
-                {
-                    hlg.spacing = spacing;
-                    hlg.childAlignment = align;
-                    hlg.childControlWidth = true;
-                    hlg.childControlHeight = true;
-                    hlg.childForceExpandWidth = false;
-                    hlg.childForceExpandHeight = false;
-                }
-                if (lg is VerticalLayoutGroup vlg)
-                {
-                    vlg.spacing = spacing;
-                    vlg.childAlignment = align;
-                    vlg.childControlWidth = true;
-                    vlg.childControlHeight = true;
-                    vlg.childForceExpandHeight = false;
-                    vlg.childForceExpandWidth = false;
-                }
-            }
-
-            if (go.GetComponent<GridLayoutGroup>() is GridLayoutGroup glg)
-            {
-                glg.padding = new RectOffset(pLeft, pRight, pTop, pBot);
-                glg.spacing = new Vector2(spacing, spacing);
-            }
-        }
-
-        /// <summary>
-        /// Applies LayoutElement properties (width, height, flex-grow) to the GameObject.
-        /// Handles 'ignore-layout' for overlay positioning.
-        /// </summary>
-        private static void ApplyLayoutStyles(GameObject go, Dictionary<string, string> styles, HorizonNode node = null)
-        {
-            if (node != null && node.Attributes.ContainsKey("ignore-layout"))
-            {
-                LayoutElement le = go.GetComponent<LayoutElement>() ?? go.AddComponent<LayoutElement>();
-                le.ignoreLayout = true;
-
-                RectTransform rt = go.GetComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.offsetMin = Vector2.zero;
-                rt.offsetMax = Vector2.zero;
-                return;
-            }
-
-            float w = ParseFloat(styles, "width", -1);
-            float h = ParseFloat(styles, "height", -1);
-            float flex = ParseFloat(styles, "flex-grow", -1);
-
-            float flexW = -1;
-            float flexH = -1;
-
-            if (flex >= 0)
-            {
-                flexW = flex;
-                flexH = flex;
-            }
-            else
-            {
-                if (w > 0) flexW = 0;
-                if (h > 0) flexH = 0;
-            }
-
-            HorizonGUIFactory.SetLayoutSize(go,
-                minW: w > 0 ? w : (float?)null,
-                minH: h > 0 ? h : (float?)null,
-                prefW: w > 0 ? w : (float?)null,
-                prefH: h > 0 ? h : (float?)null,
-                flexH: flexH,
-                flexW: flexW
-            );
-        }
-
-        /// <summary>
-        /// Applies typography styles to a TextMeshProUGUI component.
-        /// </summary>
-        private static void ApplyTextStyles(TextMeshProUGUI tmp, Dictionary<string, string> styles)
-        {
-            if (styles.TryGetValue("color", out string hex))
-            {
-                if (ColorUtility.TryParseHtmlString(hex, out Color col)) tmp.color = col;
-            }
-
-            if (styles.ContainsKey("font-size"))
-            {
-                float size = ParseFloat(styles, "font-size", tmp.fontSize);
-                tmp.fontSize = size;
-            }
-
-            if (styles.TryGetValue("text-align", out string align))
-            {
-                if (align == "center") tmp.alignment = TextAlignmentOptions.Center;
-                if (align == "right") tmp.alignment = TextAlignmentOptions.Right;
-                if (align == "left") tmp.alignment = TextAlignmentOptions.Left;
-            }
-
-            if (styles.TryGetValue("font-style", out string fStyle))
-            {
-                fStyle = fStyle.ToLower();
-                if (fStyle.Contains("bold")) tmp.fontStyle |= FontStyles.Bold;
-                if (fStyle.Contains("italic")) tmp.fontStyle |= FontStyles.Italic;
-                if (fStyle.Contains("normal")) tmp.fontStyle = FontStyles.Normal;
-            }
-        }
-
-        private static float ParseFloat(Dictionary<string, string> attrs, string key, float def)
-        {
-            if (attrs.TryGetValue(key, out string val))
-            {
-                val = val.Replace("px", "").Trim();
-                if (float.TryParse(val, out float result)) return result;
-            }
-            return def;
-        }
-
-        private static int ParseInt(Dictionary<string, string> attrs, string key, int def)
-        {
-            if (attrs.TryGetValue(key, out string val))
-            {
-                if (int.TryParse(val, out int result)) return result;
-            }
-            return def;
         }
     }
 }
