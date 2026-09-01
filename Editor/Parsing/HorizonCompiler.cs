@@ -100,6 +100,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
         {
             if (context == null)
             {
+                EnsureCollectionsInitialized();
                 context = new HorizonBuildContext(_activeStyleSheet, _activeResourceMap, _isBuildingTemplate, BuildNode);
             }
 
@@ -150,7 +151,7 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
 
                 RegisterChannels(createdObj, node);
 
-                if (node.Tag.ToLower() != "h-grid")
+                if (!string.Equals(node.Tag, "h-grid", System.StringComparison.OrdinalIgnoreCase))
                 {
                     foreach (var child in node.Children)
                     {
@@ -166,6 +167,16 @@ namespace BlackHorizon.HorizonGUI.Editor.Parsing
                     rt.localRotation = Quaternion.identity;
                 }
             }
+        }
+
+        /// <summary>
+        /// Ensures internal tracking registries are allocated before compiling standalone nodes.
+        /// </summary>
+        private static void EnsureCollectionsInitialized()
+        {
+            _activeChannels ??= new Dictionary<string, ChannelData>();
+            _bindingsRegistry ??= new Dictionary<string, GameObject>();
+            _pendingEvents ??= new List<PendingEvent>();
         }
 
         /// <summary>
